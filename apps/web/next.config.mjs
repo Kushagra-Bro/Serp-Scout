@@ -1,5 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  ...(process.env.NEXT_STANDALONE === 'true' ? { output: 'standalone' } : {}),
   reactStrictMode: true,
   transpilePackages: ['@serp-scout/types'],
   async rewrites() {

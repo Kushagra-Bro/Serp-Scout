@@ -1,0 +1,48 @@
+FROM node:20-bookworm-slim AS base
+WORKDIR /app
+
+# Install Chromium and runtime dependencies for PDF report generation
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    chromium \
+    fonts-liberation \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+ENV PNPM_HOME="/pnpm"
+ENV PATH="$PNPM_HOME:$PATH"
+RUN corepack enable
+
+# 1. Install dependencies
+FROM base AS dependencies
+WORKDIR /app
+
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
+COPY apps/api/package.json ./apps/api/
+COPY packages/types/package.json ./packages/types/
+COPY packages/db/package.json ./packages/db/
+COPY packages/agents/package.json ./packages/agents/
+COPY packages/serpapi/package.json ./packages/serpapi/
+
+RUN pnpm install --frozen-lockfile
+
+# 2. Build TypeScript packages & API
+FROM dependencies AS builder
+WORKDIR /app
+
+COPY . .
+RUN pnpm --filter @serp-scout/types build
+RUN pnpm --filter @serp-scout/agents build
+RUN pnpm --filter api build
+
+# 3. Production Runner
+FROM base AS runner
+WORKDIR /app
+ENV NODE_ENV=production
+ENV PORT=3001
+
+COPY --from=builder /app /app
+
+EXPOSE 3001
+CMD ["pnpm", "--filter", "api", "start"]

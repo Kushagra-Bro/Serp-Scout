@@ -38,6 +38,8 @@ import {
   RefreshCw,
   ArrowRight,
   Smile,
+  Printer,
+  Download,
 } from 'lucide-react';
 import type {
   CompetitorVulnerability,
@@ -193,6 +195,7 @@ export default function ContentAndAnalysisPage() {
   const [isGeneratingReply, setIsGeneratingReply] = useState(false);
   const [generatedReplyResult, setGeneratedReplyResult] = useState<ReviewReplyResult | null>(null);
   const [shieldError, setShieldError] = useState<string | null>(null);
+  const [battlecardOpen, setBattlecardOpen] = useState(false);
 
   const handleCopy = (key: string, text: string) => {
     if (typeof navigator !== 'undefined' && navigator.clipboard) {
@@ -846,6 +849,15 @@ export default function ContentAndAnalysisPage() {
 
                 <div className="flex items-center gap-2 shrink-0">
                   <button
+                    type="button"
+                    onClick={() => setBattlecardOpen(!battlecardOpen)}
+                    className="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold flex items-center gap-1.5 transition border border-slate-200 shadow-2xs cursor-pointer"
+                  >
+                    <FileText className="w-3.5 h-3.5 text-indigo-600" />
+                    <span>{battlecardOpen ? 'Close Battlecard' : '1-Page Sales Battlecard'}</span>
+                  </button>
+
+                  <button
                     onClick={handleRunMessaging}
                     disabled={analyzingMessaging}
                     className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold flex items-center gap-1.5 shadow-sm transition disabled:opacity-50"
@@ -855,6 +867,92 @@ export default function ContentAndAnalysisPage() {
                   </button>
                 </div>
               </div>
+
+              {/* 1-Page Executive Sales Battlecard */}
+              {battlecardOpen && (
+                <div className="bg-white border-2 border-indigo-200 rounded-2xl p-6 shadow-md animate-fade-in space-y-5">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4">
+                    <div>
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase bg-indigo-50 text-indigo-700 border border-indigo-200">
+                        Front-Desk &amp; Sales Pitch Brief
+                      </span>
+                      <h3 className="text-base font-black text-slate-900 mt-1">
+                        Executive Competitor Counter-Battlecard
+                      </h3>
+                      <p className="text-xs text-slate-500">
+                        Printable 1-page intelligence brief to help staff win prospects inquiring about local rivals.
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const markdownText = `# COMPETITOR COUNTER-BATTLECARD\n\n## Market Summary\n${messagingData.overallTakeaway}\n\n## Competitor Vulnerabilities to Exploit\n${messagingData.competitors.map((c) => `- ${c.competitorName} (${c.domain}): ${c.primaryOffer || c.differentiator}`).join('\n')}\n\n## Ready-to-Deploy Counter Headlines\n${(messagingData.deployableHeadlines || []).map((h) => `- ${h.hook}: ${h.rationale}`).join('\n')}`;
+                          handleCopy('battlecard_full', markdownText);
+                        }}
+                        className="px-3 py-1.5 rounded-lg text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 flex items-center gap-1.5 transition"
+                      >
+                        {copiedKey === 'battlecard_full' ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5 text-slate-500" />}
+                        <span>{copiedKey === 'battlecard_full' ? 'Copied Battlecard!' : 'Copy Markdown'}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (typeof window !== 'undefined') window.print();
+                        }}
+                        className="px-3 py-1.5 rounded-lg text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 flex items-center gap-1.5 transition"
+                      >
+                        <Printer className="w-3.5 h-3.5 text-slate-500" />
+                        <span>Print</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* 3 Core Battlecard Pillars */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+                    {/* Column 1: The "Why Choose Us" Talk Track */}
+                    <div className="p-4 rounded-xl bg-slate-50 border border-slate-200/80 space-y-2">
+                      <span className="text-[10px] font-extrabold uppercase tracking-wider text-indigo-600">
+                        1. Primary Winning Angle
+                      </span>
+                      <h4 className="font-bold text-slate-900">
+                        Guaranteed Upfront Certainty
+                      </h4>
+                      <p className="text-slate-600 text-[11px] leading-relaxed">
+                        &quot;Unlike other shops where pricing is ambiguous until the final bill, we provide 100% upfront quotes and same-day scheduling guaranteed.&quot;
+                      </p>
+                    </div>
+
+                    {/* Column 2: What to Say When Prospect Mentions a Rival */}
+                    <div className="p-4 rounded-xl bg-slate-50 border border-slate-200/80 space-y-2">
+                      <span className="text-[10px] font-extrabold uppercase tracking-wider text-rose-600">
+                        2. Objection Neutralizer
+                      </span>
+                      <h4 className="font-bold text-slate-900">
+                        If They Mention Calling Rivals
+                      </h4>
+                      <p className="text-slate-600 text-[11px] leading-relaxed">
+                        &quot;Many clients who called other providers found wait times excessive or were asked to leave a voicemail. We can lock in your exact confirmed slot right now.&quot;
+                      </p>
+                    </div>
+
+                    {/* Column 3: High Converting Offer */}
+                    <div className="p-4 rounded-xl bg-slate-50 border border-slate-200/80 space-y-2">
+                      <span className="text-[10px] font-extrabold uppercase tracking-wider text-emerald-600">
+                        3. Deal Closer Offer
+                      </span>
+                      <h4 className="font-bold text-slate-900">
+                        Zero-Risk Guarantee Hook
+                      </h4>
+                      <p className="text-slate-600 text-[11px] leading-relaxed">
+                        &quot;We stand behind our work with our 100% satisfaction commitment. If you aren&apos;t completely satisfied, we make it right at zero additional cost.&quot;
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Strategic Market Summary */}
               <div className="bg-gradient-to-r from-indigo-900 to-slate-900 text-white rounded-2xl p-6 shadow-sm space-y-2">

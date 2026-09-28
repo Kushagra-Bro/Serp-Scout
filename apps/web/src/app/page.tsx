@@ -29,6 +29,7 @@ import {
   ChevronRight,
   Flame,
   Check,
+  Menu,
 } from 'lucide-react';
 
 function getUserDisplayName(user: any): string {
@@ -47,7 +48,8 @@ function getUserDisplayName(user: any): string {
 
 export default function HomePage() {
   const router = useRouter();
-  const { user, isSignedIn } = useUser();
+  const { user, isSignedIn, isLoaded } = useUser();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCompany, setSelectedCompany] = useState('Austin Smile Studio');
@@ -85,9 +87,9 @@ export default function HomePage() {
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 selection:bg-indigo-500 selection:text-white relative">
       {/* ─────────────────────────────────────────────────────────────
-          1. HEADER WITH INTERACTIVE HOVER EFFECTS
+          1. HEADER WITH INTERACTIVE HOVER EFFECTS & MOBILE MENU
       ───────────────────────────────────────────────────────────── */}
-      <header className="sticky top-0 z-40 backdrop-blur-md bg-white/80 border-b border-slate-200/80 transition-all">
+      <header className="sticky top-0 z-50 backdrop-blur-md bg-white/90 border-b border-slate-200/80 transition-all shadow-xs">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           {/* Brand Logo */}
           <Link href="/" className="flex items-center gap-2.5 group">
@@ -100,8 +102,11 @@ export default function HomePage() {
               </svg>
             </div>
             <div className="flex flex-col">
-              <span className="font-extrabold text-lg tracking-tight text-slate-900 group-hover:text-indigo-600 transition-colors">
+              <span className="font-extrabold text-lg tracking-tight text-slate-900 group-hover:text-indigo-600 transition-colors leading-none">
                 Serp<span className="bg-gradient-to-r from-indigo-600 to-cyan-600 bg-clip-text text-transparent">Scout</span>
+              </span>
+              <span className="text-[10px] text-slate-400 font-semibold tracking-wider uppercase mt-0.5">
+                Autonomous SEO Radar
               </span>
             </div>
           </Link>
@@ -124,9 +129,27 @@ export default function HomePage() {
             ))}
           </nav>
 
-          {/* CTA */}
-          <div className="flex items-center gap-3">
-            <SignedIn>
+          {/* CTA & Auth Area */}
+          <div className="flex items-center gap-2 sm:gap-3">
+            {!isLoaded ? (
+              // Hydration Fallback: render default buttons immediately so zero layout shift or missing button flash occurs
+              <div className="flex items-center gap-2">
+                <Link
+                  href="/sign-in"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs sm:text-sm font-semibold text-slate-600 hover:text-slate-900 rounded-lg transition"
+                >
+                  <Lock className="w-3.5 h-3.5 text-slate-400" />
+                  <span>Sign In</span>
+                </Link>
+                <Link
+                  href="/sign-up"
+                  className="px-3.5 sm:px-5 py-2 rounded-xl font-bold text-xs sm:text-sm text-white bg-gradient-to-r from-indigo-600 via-indigo-700 to-cyan-600 shadow-md shadow-indigo-500/20 flex items-center gap-1.5"
+                >
+                  <span>Sign Up Free</span>
+                  <ArrowRight className="w-4 h-4" />
+                </Link>
+              </div>
+            ) : isSignedIn ? (
               <div className="flex items-center gap-2">
                 <Link
                   href="/app"
@@ -140,29 +163,90 @@ export default function HomePage() {
                   <span className="max-w-[130px] truncate">{getUserDisplayName(user)}</span>
                   <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
                 </Link>
-                <div className="hidden sm:block pl-1">
+                <div className="pl-1">
                   <UserButton afterSignOutUrl="/" />
                 </div>
               </div>
-            </SignedIn>
-            <SignedOut>
-              <Link
-                href="/sign-in"
-                className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition"
-              >
-                <Lock className="w-3.5 h-3.5 text-slate-400" />
-                <span>Sign In</span>
-              </Link>
-              <Link
-                href="/sign-up"
-                className="relative group overflow-hidden px-4 sm:px-5 py-2 rounded-xl font-semibold text-xs sm:text-sm text-white bg-gradient-to-r from-indigo-600 via-indigo-700 to-cyan-600 shadow-md shadow-indigo-500/20 hover:shadow-lg hover:shadow-indigo-500/30 hover:scale-[1.02] active:scale-[0.99] transition-all duration-200 cursor-pointer flex items-center gap-1.5"
-              >
-                <span>Start Free Scout</span>
-                <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
-              </Link>
-            </SignedOut>
+            ) : (
+              <div className="flex items-center gap-2">
+                <Link
+                  href="/sign-in"
+                  className="inline-flex items-center gap-1 px-2.5 sm:px-3.5 py-1.5 text-xs sm:text-sm font-bold text-slate-600 hover:text-indigo-600 hover:bg-slate-100 rounded-lg transition"
+                >
+                  <Lock className="w-3.5 h-3.5 text-slate-400" />
+                  <span>Sign In</span>
+                </Link>
+                <Link
+                  href="/sign-up"
+                  className="relative group overflow-hidden px-3.5 sm:px-5 py-2 rounded-xl font-bold text-xs sm:text-sm text-white bg-gradient-to-r from-indigo-600 via-indigo-700 to-cyan-600 shadow-md shadow-indigo-500/20 hover:shadow-lg hover:shadow-indigo-500/30 hover:scale-[1.02] active:scale-[0.99] transition-all duration-200 cursor-pointer flex items-center gap-1.5"
+                >
+                  <span>Sign Up Free</span>
+                  <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
+                </Link>
+              </div>
+            )}
+
+            {/* Mobile Hamburger Menu Toggle */}
+            <button
+              type="button"
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              className="md:hidden p-2 rounded-xl text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition"
+              aria-label="Toggle navigation menu"
+            >
+              {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+            </button>
           </div>
         </div>
+
+        {/* Mobile Navigation Drawer */}
+        {mobileMenuOpen && (
+          <div className="md:hidden border-t border-slate-200 bg-white/95 backdrop-blur-xl px-4 pt-3 pb-5 space-y-2 animate-in fade-in slide-in-from-top-2 duration-200 shadow-xl">
+            {[
+              { label: 'Features Overview', href: '#features' },
+              { label: 'How It Works', href: '#how-it-works' },
+              { label: 'Live Product Radar', href: '#live-radar' },
+              { label: 'Platform Comparison', href: '#comparison' },
+            ].map((item) => (
+              <a
+                key={item.label}
+                href={item.href}
+                onClick={() => setMobileMenuOpen(false)}
+                className="block px-3 py-2 rounded-lg text-sm font-semibold text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 transition"
+              >
+                {item.label}
+              </a>
+            ))}
+            <div className="pt-2 border-t border-slate-100 flex flex-col gap-2">
+              {isSignedIn ? (
+                <Link
+                  href="/app"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="w-full text-center px-4 py-2.5 rounded-xl font-bold text-sm text-indigo-600 bg-indigo-50 hover:bg-indigo-100 transition"
+                >
+                  Go to Dashboard ({getUserDisplayName(user)})
+                </Link>
+              ) : (
+                <div className="grid grid-cols-2 gap-2 pt-1">
+                  <Link
+                    href="/sign-in"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition"
+                  >
+                    <Lock className="w-3.5 h-3.5 text-slate-400" />
+                    <span>Sign In</span>
+                  </Link>
+                  <Link
+                    href="/sign-up"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="flex items-center justify-center gap-1 px-3 py-2 text-xs font-bold text-white bg-gradient-to-r from-indigo-600 to-cyan-600 rounded-lg shadow-sm transition"
+                  >
+                    <span>Sign Up Free</span>
+                  </Link>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </header>
 
       {/* ─────────────────────────────────────────────────────────────
