@@ -11,6 +11,7 @@ import searchRunsRouter from './routes/search-runs.js';
 import competitorsRouter from './routes/competitors.js';
 import keywordsRouter from './routes/keywords.js';
 import analysisRouter from './routes/analysis.js';
+import researchGraphRouter from './routes/research-graph.js';
 import reportsRouter, { sharedReportsRouter } from './routes/reports.js';
 import schedulesRouter from './routes/schedules.js';
 import {
@@ -19,7 +20,9 @@ import {
 } from './jobs/workers/research.worker.js';
 import { startReportWorker } from './jobs/workers/report.worker.js';
 import { startStaleCheckWorker } from './jobs/workers/stale-check.worker.js';
+import { startResearchGraphWorker } from './jobs/workers/research-graph.worker.js';
 import { syncAllWorkspaceSchedules } from './jobs/scheduler.js';
+import { runCatchUpReconciliation } from './jobs/catchup.js';
 
 const app = express();
 
@@ -75,6 +78,10 @@ app.use('/api/keywords', requireAuthenticatedUser, requireWorkspace, keywordsRou
 app.use('/api/businesses', requireAuthenticatedUser, requireWorkspace, analysisRouter);
 app.use('/api/analysis', requireAuthenticatedUser, requireWorkspace, analysisRouter);
 
+// Protected LangGraph Research Pipeline Routes
+app.use('/api/businesses', requireAuthenticatedUser, requireWorkspace, researchGraphRouter);
+app.use('/api/research', requireAuthenticatedUser, requireWorkspace, researchGraphRouter);
+
 // Protected Reports & Recommendations Routes
 app.use('/api/businesses', requireAuthenticatedUser, requireWorkspace, reportsRouter);
 app.use('/api/reports', requireAuthenticatedUser, requireWorkspace, reportsRouter);
@@ -92,9 +99,26 @@ if (env.NODE_ENV !== 'test') {
   startResearchWorker();
   startReportWorker();
   startStaleCheckWorker();
-  syncAllWorkspaceSchedules().catch((err) => {
-    console.error('Failed to initialize workspace schedules:', err);
-  });
+  startResearchGraphWorker();
+  // Register the repeat jobs first, then reconcile against the database so any
+  // occurrence missed while the process was down gets enqueued. Sequencing this
+  // matters: the catch-up's pending-job scan must see the freshly registered
+  // repeats. A sync failure must not block the repair, hence the intermediate catch.
+  syncAllWorkspaceSchedules()
+    .catch((err) => {
+      console.error('Failed to initialize workspace schedules:', err);
+    })
+    .then(() => runCatchUpReconciliation())
+    .then((r) => {
+      console.log(
+        `[CatchUp] Boot reconciliation: checked ${r.checked}, enqueued ${r.enqueued}, ` +
+          `already pending ${r.alreadyPending}, fresh ${r.fresh}, ` +
+          `off-cadence ${r.offCadence}, never analyzed ${r.neverAnalyzed}.`
+      );
+    })
+    .catch((err) => {
+      console.error('[CatchUp] Boot reconciliation failed:', err);
+    });
   console.log('👷 All BullMQ Workers & Repeatable Schedulers initialized');
 }
 

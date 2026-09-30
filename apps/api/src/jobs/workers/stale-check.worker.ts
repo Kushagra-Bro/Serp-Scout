@@ -2,6 +2,7 @@ import { Worker, Job } from 'bullmq';
 import { eq, and, sql } from 'drizzle-orm';
 import { db, businesses, workspaces } from '../../db/index.js';
 import { redisConnection } from '../queues.js';
+import { runCatchUpReconciliation } from '../catchup.js';
 
 export interface StaleCheckJobData {
   workspaceId?: string;
@@ -84,6 +85,11 @@ export function startStaleCheckWorker() {
   const worker = new Worker<StaleCheckJobData>(
     'stale-check',
     async (job: Job<StaleCheckJobData>) => {
+      // Two concerns share this queue; dispatch by job name so the exported
+      // executeStaleCheck contract stays untouched.
+      if (job.name === 'recurring-catch-up') {
+        return await runCatchUpReconciliation();
+      }
       return await executeStaleCheck(job.data);
     },
     {

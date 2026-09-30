@@ -2,20 +2,20 @@ import {
   searchGoogle,
   searchGoogleMaps,
 } from '@serp-scout/serpapi';
-import { db, workspaces, businesses, searchRuns, searchResults } from './db/index.js';
+import { db, workspaces, businesses, searchRuns, searchResults } from '../src/db/index.js';
 import { eq } from 'drizzle-orm';
-import { env } from './config/env.js';
+import { env } from '../src/config/env.js';
 import {
   executeSearchRun,
   listSearchRunsForBusiness,
   getSearchRunDetails,
-} from './services/search-run.service.js';
+} from '../src/services/search-run.service.js';
 
 async function main() {
-  console.log('🧪 Starting Milestone 3: SerpApi Adapter & Search Runs verification...\n');
+  console.log('ðŸ§ª Starting Milestone 3: SerpApi Adapter & Search Runs verification...\n');
 
   // 1. Test live SerpApi Google Web search
-  console.log('1️⃣ Testing live SerpApi Google Web Search...');
+  console.log('1ï¸âƒ£ Testing live SerpApi Google Web Search...');
   const searchResp = await searchGoogle(
     {
       query: 'dentist in Austin TX',
@@ -28,7 +28,7 @@ async function main() {
     throw new Error('SerpApi Google search returned 0 results');
   }
 
-  console.log(`✅ Retrieved ${searchResp.results.length} organic search results.`);
+  console.log(`âœ… Retrieved ${searchResp.results.length} organic search results.`);
   console.log(`   #1: "${searchResp.results[0].title}" (${searchResp.results[0].domain})`);
   console.log(`   Detected SERP Features: ${JSON.stringify(searchResp.detectedFeatures)}`);
   if (searchResp.paaQuestions.length > 0) {
@@ -36,7 +36,7 @@ async function main() {
   }
 
   // 2. Test live SerpApi Google Maps search
-  console.log('\n2️⃣ Testing live SerpApi Google Maps Search...');
+  console.log('\n2ï¸âƒ£ Testing live SerpApi Google Maps Search...');
   const mapsResp = await searchGoogleMaps(
     {
       query: 'dentist in Austin TX',
@@ -48,11 +48,11 @@ async function main() {
     throw new Error('SerpApi Google Maps search returned 0 results');
   }
 
-  console.log(`✅ Retrieved ${mapsResp.results.length} Google Maps Local Pack results.`);
+  console.log(`âœ… Retrieved ${mapsResp.results.length} Google Maps Local Pack results.`);
   console.log(`   #1 Map Item: "${mapsResp.results[0].title}" (Rating: ${mapsResp.results[0].rating || 'N/A'}, Address: ${mapsResp.results[0].address || 'N/A'})`);
 
   // 3. Test Full Search Run Service & Database Persistence
-  console.log('\n3️⃣ Testing full Search Run Service pipeline with DB persistence...');
+  console.log('\n3ï¸âƒ£ Testing full Search Run Service pipeline with DB persistence...');
   const testUserId = 'test_serp_user_' + Math.random().toString(36).substring(2, 7);
 
   // Create test workspace & business
@@ -86,8 +86,8 @@ async function main() {
       num: 5,
     });
 
-    console.log(`✅ Search run created (ID: ${runResult.run.id}) with status: ${runResult.run.status}`);
-    console.log(`✅ Persisted ${runResult.resultsCount} normalized search results to database.`);
+    console.log(`âœ… Search run created (ID: ${runResult.run.id}) with status: ${runResult.run.status}`);
+    console.log(`âœ… Persisted ${runResult.resultsCount} normalized search results to database.`);
 
     // Verify search_results rows in database
     const dbResults = await db
@@ -98,7 +98,7 @@ async function main() {
     if (dbResults.length === 0) {
       throw new Error('search_results records were not found in database');
     }
-    console.log(`✅ Database records verified: ${dbResults.length} rows linked to search run.`);
+    console.log(`âœ… Database records verified: ${dbResults.length} rows linked to search run.`);
 
     // Verify workspace quota incremented
     const [updatedWs] = await db
@@ -109,10 +109,10 @@ async function main() {
     if (updatedWs.usedQuota !== 1) {
       throw new Error(`Expected usedQuota=1, got ${updatedWs.usedQuota}`);
     }
-    console.log(`✅ Quota increment verified: ${updatedWs.usedQuota}/${updatedWs.monthlyQuota} units used.`);
+    console.log(`âœ… Quota increment verified: ${updatedWs.usedQuota}/${updatedWs.monthlyQuota} units used.`);
 
     // 4. Test Quota Enforcement (Exceeded Quota)
-    console.log('\n4️⃣ Testing Quota Enforcement blocking...');
+    console.log('\n4ï¸âƒ£ Testing Quota Enforcement blocking...');
     await db
       .update(workspaces)
       .set({ usedQuota: 10 })
@@ -129,7 +129,7 @@ async function main() {
     } catch (err: any) {
       if (err.message.includes('quota exceeded')) {
         quotaBlocked = true;
-        console.log(`✅ Over-quota search was properly blocked: "${err.message}"`);
+        console.log(`âœ… Over-quota search was properly blocked: "${err.message}"`);
       }
     }
 
@@ -138,21 +138,21 @@ async function main() {
     }
 
     // 5. Test history and detail retrieval
-    console.log('\n5️⃣ Testing search history and detail queries...');
+    console.log('\n5ï¸âƒ£ Testing search history and detail queries...');
     const history = await listSearchRunsForBusiness(testBiz.id);
     const details = await getSearchRunDetails(runResult.run.id);
 
     if (history.length === 0 || !details || details.results.length === 0) {
       throw new Error('Search history or details retrieval failed');
     }
-    console.log(`✅ Successfully retrieved history (${history.length} runs) and details (${details.results.length} results).`);
+    console.log(`âœ… Successfully retrieved history (${history.length} runs) and details (${details.results.length} results).`);
   } finally {
     // Cleanup test data
     await db.delete(workspaces).where(eq(workspaces.id, testWs.id));
-    console.log('✅ Cleaned up test workspace and child records.');
+    console.log('âœ… Cleaned up test workspace and child records.');
   }
 
-  console.log('\n🎉 Milestone 3 verification PASSED! SerpApi Adapter & Search Runs is production-ready.');
+  console.log('\nðŸŽ‰ Milestone 3 verification PASSED! SerpApi Adapter & Search Runs is production-ready.');
   process.exit(0);
 }
 

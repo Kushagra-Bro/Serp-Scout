@@ -1,8 +1,8 @@
-import { db, workspaces, users, businesses, businessLocations, services } from './db/index.js';
+import { db, workspaces, users, businesses, businessLocations, services } from '../src/db/index.js';
 import { eq, and } from 'drizzle-orm';
 
 async function main() {
-  console.log('🧪 Starting Milestone 1: Authentication & Business Onboarding verification...\n');
+  console.log('ðŸ§ª Starting Milestone 1: Authentication & Business Onboarding verification...\n');
 
   const testUserId = 'user_test_' + Math.random().toString(36).substring(2, 9);
   const testEmail = `test_${Date.now()}@serp-scout.test`;
@@ -10,7 +10,7 @@ async function main() {
   let createdBusinessId: string | null = null;
 
   // 1. Workspace Creation test
-  console.log('1️⃣ Testing Workspace & User creation in Neon database...');
+  console.log('1ï¸âƒ£ Testing Workspace & User creation in Neon database...');
   try {
     const [ws] = await db
       .insert(workspaces)
@@ -35,15 +35,15 @@ async function main() {
       })
       .returning();
 
-    console.log(`✅ Workspace created successfully: "${ws.name}" (ID: ${ws.id})`);
-    console.log(`✅ Owner linked: "${user.name}" (${user.email})`);
+    console.log(`âœ… Workspace created successfully: "${ws.name}" (ID: ${ws.id})`);
+    console.log(`âœ… Owner linked: "${user.name}" (${user.email})`);
   } catch (err) {
-    console.error('❌ Workspace creation failed:', err);
+    console.error('âŒ Workspace creation failed:', err);
     process.exit(1);
   }
 
   // 2. Business Profile Creation with locations & services
-  console.log('\n2️⃣ Testing Business profile creation with locations and services...');
+  console.log('\n2ï¸âƒ£ Testing Business profile creation with locations and services...');
   try {
     const [biz] = await db
       .insert(businesses)
@@ -96,16 +96,16 @@ async function main() {
       })
       .returning();
 
-    console.log(`✅ Business profile created: "${biz.name}" (ID: ${biz.id})`);
-    console.log(`✅ Business location linked: "${loc.name}" in ${loc.city}`);
-    console.log(`✅ Business services linked: "${svc1.name}", "${svc2.name}"`);
+    console.log(`âœ… Business profile created: "${biz.name}" (ID: ${biz.id})`);
+    console.log(`âœ… Business location linked: "${loc.name}" in ${loc.city}`);
+    console.log(`âœ… Business services linked: "${svc1.name}", "${svc2.name}"`);
   } catch (err) {
-    console.error('❌ Business creation failed:', err);
+    console.error('âŒ Business creation failed:', err);
     process.exit(1);
   }
 
   // 3. Query and Isolation verification
-  console.log('\n3️⃣ Verifying workspace data retrieval and relationships...');
+  console.log('\n3ï¸âƒ£ Verifying workspace data retrieval and relationships...');
   try {
     const [retrievedBiz] = await db
       .select()
@@ -131,14 +131,14 @@ async function main() {
       throw new Error(`Expected 1 location and 2 services, got ${linkedLocations.length} locs, ${linkedServices.length} svcs`);
     }
 
-    console.log(`✅ Retrieval verified: ${retrievedBiz.name} has ${linkedLocations.length} location and ${linkedServices.length} services.`);
+    console.log(`âœ… Retrieval verified: ${retrievedBiz.name} has ${linkedLocations.length} location and ${linkedServices.length} services.`);
   } catch (err) {
-    console.error('❌ Data retrieval verification failed:', err);
+    console.error('âŒ Data retrieval verification failed:', err);
     process.exit(1);
   }
 
   // 4. URL Validation test
-  console.log('\n4️⃣ Testing URL safety rules...');
+  console.log('\n4ï¸âƒ£ Testing URL safety rules...');
   const invalidUrls = ['javascript:alert(1)', 'ftp://server.com/files', 'not-a-url', 'http://'];
   for (const badUrl of invalidUrls) {
     let isValid = false;
@@ -149,14 +149,14 @@ async function main() {
       isValid = false;
     }
     if (isValid) {
-      console.error(`❌ Bad URL was incorrectly treated as valid: ${badUrl}`);
+      console.error(`âŒ Bad URL was incorrectly treated as valid: ${badUrl}`);
       process.exit(1);
     }
   }
-  console.log('✅ URL validation correctly rejects invalid and dangerous protocols.');
+  console.log('âœ… URL validation correctly rejects invalid and dangerous protocols.');
 
   // 5. Cleanup test records
-  console.log('\n5️⃣ Cleaning up test records (testing cascade delete)...');
+  console.log('\n5ï¸âƒ£ Cleaning up test records (testing cascade delete)...');
   try {
     await db.delete(workspaces).where(eq(workspaces.id, createdWorkspaceId!));
     // Verify business and locations were cascade-deleted
@@ -164,13 +164,13 @@ async function main() {
     if (checkBiz.length !== 0) {
       throw new Error('Cascade delete did not remove business record');
     }
-    console.log('✅ Cascade delete verified: deleting workspace cleanly purged child business, locations, and users.');
+    console.log('âœ… Cascade delete verified: deleting workspace cleanly purged child business, locations, and users.');
   } catch (err) {
-    console.error('❌ Cleanup failed:', err);
+    console.error('âŒ Cleanup failed:', err);
     process.exit(1);
   }
 
-  console.log('\n🎉 Milestone 1 verification PASSED! Authentication & Business Onboarding is production-ready.');
+  console.log('\nðŸŽ‰ Milestone 1 verification PASSED! Authentication & Business Onboarding is production-ready.');
   process.exit(0);
 }
 

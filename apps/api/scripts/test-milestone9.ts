@@ -12,18 +12,18 @@ import {
   sourceEvidence,
   notifications,
   rankingObservations,
-} from './db/index.js';
+} from '../src/db/index.js';
 import { eq, and } from 'drizzle-orm';
 import { isPrivateIp, validateTargetUrl } from '@serp-scout/agents';
-import { enforceQuota } from './middleware/quota.js';
-import { WorkspaceRequest } from './middleware/workspace.js';
-import { executeSearchRun } from './services/search-run.service.js';
+import { enforceQuota } from '../src/middleware/quota.js';
+import { WorkspaceRequest } from '../src/middleware/workspace.js';
+import { executeSearchRun } from '../src/services/search-run.service.js';
 import {
   generateRecommendations,
   generateWeeklyReport,
 } from '@serp-scout/agents';
-import { generateReportPdf } from './services/pdf.service.js';
-import { NotificationService } from './services/notification.service.js';
+import { generateReportPdf } from '../src/services/pdf.service.js';
+import { NotificationService } from '../src/services/notification.service.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -31,10 +31,10 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 async function main() {
-  console.log('🧪 Starting Milestone 9: Quality, Security & Launch verification...\n');
+  console.log('ðŸ§ª Starting Milestone 9: Quality, Security & Launch verification...\n');
 
-  // ── 1. Security & Secrets Review ───────────────────────────────────────────
-  console.log('1️⃣ Auditing Secret Exposure (Acceptance Criteria: "Provider keys are not exposed")...');
+  // â”€â”€ 1. Security & Secrets Review â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  console.log('1ï¸âƒ£ Auditing Secret Exposure (Acceptance Criteria: "Provider keys are not exposed")...');
 
   const webEnvPath = path.resolve(__dirname, '../../web/.env.local');
   if (fs.existsSync(webEnvPath)) {
@@ -53,11 +53,11 @@ async function main() {
         throw new Error(`SECURITY LEAK: Found provider key ${key} in client-side environment!`);
       }
     }
-    console.log('✅ Client environment check passed: Zero provider keys (SerpApi, Groq, Resend) exposed in Next.js web application.');
+    console.log('âœ… Client environment check passed: Zero provider keys (SerpApi, Groq, Resend) exposed in Next.js web application.');
   }
 
-  // ── 2. SSRF Protection & Network Boundary Verification ──────────────────────
-  console.log('\n2️⃣ Testing SSRF Protection & Private IP Filtering...');
+  // â”€â”€ 2. SSRF Protection & Network Boundary Verification â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  console.log('\n2ï¸âƒ£ Testing SSRF Protection & Private IP Filtering...');
   const forbiddenTargets = [
     'http://localhost:3000',
     'http://127.0.0.1/admin',
@@ -73,7 +73,7 @@ async function main() {
       await validateTargetUrl(url);
     } catch (err: any) {
       blocked = true;
-      console.log(`✅ Safely blocked SSRF target "${url}": ${err.message}`);
+      console.log(`âœ… Safely blocked SSRF target "${url}": ${err.message}`);
     }
 
     if (!blocked) {
@@ -81,8 +81,8 @@ async function main() {
     }
   }
 
-  // ── 3. Cross-Workspace Data Leakage & Multi-Tenant Authorization ───────────
-  console.log('\n3️⃣ Testing Cross-Workspace Isolation (Acceptance Criteria: "Users cannot access another workspace\'s data")...');
+  // â”€â”€ 3. Cross-Workspace Data Leakage & Multi-Tenant Authorization â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  console.log('\n3ï¸âƒ£ Testing Cross-Workspace Isolation (Acceptance Criteria: "Users cannot access another workspace\'s data")...');
 
   // Create Workspace Alpha
   const [wsAlpha] = await db
@@ -128,7 +128,7 @@ async function main() {
     })
     .returning();
 
-  console.log(`🏢 Created Workspace Alpha (${wsAlpha.id}) and Beta (${wsBeta.id})`);
+  console.log(`ðŸ¢ Created Workspace Alpha (${wsAlpha.id}) and Beta (${wsBeta.id})`);
 
   // Query businesses with Workspace Alpha scope
   const alphaVisibleBusinesses = await db
@@ -136,14 +136,14 @@ async function main() {
     .from(businesses)
     .where(and(eq(businesses.id, bizBeta.id), eq(businesses.workspaceId, wsAlpha.id)));
 
-  console.log(`🔍 Querying Business Beta with Workspace Alpha credentials returned: ${alphaVisibleBusinesses.length} records.`);
+  console.log(`ðŸ” Querying Business Beta with Workspace Alpha credentials returned: ${alphaVisibleBusinesses.length} records.`);
   if (alphaVisibleBusinesses.length !== 0) {
     throw new Error('AUTHORIZATION LEAK: Workspace Alpha was able to query Business Beta data!');
   }
-  console.log('✅ Multi-tenant workspace barrier verified: Cross-workspace access strictly returns 0 records.');
+  console.log('âœ… Multi-tenant workspace barrier verified: Cross-workspace access strictly returns 0 records.');
 
-  // ── 4. Usage Quota Limit Testing ───────────────────────────────────────────
-  console.log('\n4️⃣ Testing Monthly Quota Enforcement (Acceptance Criteria: "Search usage does not exceed monthly quotas")...');
+  // â”€â”€ 4. Usage Quota Limit Testing â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  console.log('\n4ï¸âƒ£ Testing Monthly Quota Enforcement (Acceptance Criteria: "Search usage does not exceed monthly quotas")...');
 
   let quotaExceededCalled = false;
   let responseStatusCode = 200;
@@ -176,15 +176,15 @@ async function main() {
     quotaExceededCalled = true;
   });
 
-  console.log(`🔍 Quota middleware status: ${responseStatusCode} (Expected: 429)`);
-  console.log(`🔍 Quota error code: ${responseBody?.error?.code} (Expected: QUOTA_EXCEEDED)`);
+  console.log(`ðŸ” Quota middleware status: ${responseStatusCode} (Expected: 429)`);
+  console.log(`ðŸ” Quota error code: ${responseBody?.error?.code} (Expected: QUOTA_EXCEEDED)`);
   if (responseStatusCode !== 429 || responseBody?.error?.code !== 'QUOTA_EXCEEDED' || quotaExceededCalled) {
     throw new Error('QUOTA ENFORCEMENT FAILED: Over-quota request was not blocked with 429!');
   }
-  console.log('✅ Quota limits verified: Requests exceeding monthly allocation receive HTTP 429 with Retry-After.');
+  console.log('âœ… Quota limits verified: Requests exceeding monthly allocation receive HTTP 429 with Retry-After.');
 
-  // ── 5. Search Failure Resilience & Error-State Recovery ─────────────────────
-  console.log('\n5️⃣ Testing Search Failure Resilience & Error-State Recovery...');
+  // â”€â”€ 5. Search Failure Resilience & Error-State Recovery â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  console.log('\n5ï¸âƒ£ Testing Search Failure Resilience & Error-State Recovery...');
   const failedRun = await db
     .insert(searchRuns)
     .values({
@@ -203,13 +203,13 @@ async function main() {
     .from(searchRuns)
     .where(eq(searchRuns.id, failedRun[0].id));
 
-  console.log(`✅ Search run error state stored: Status = "${savedFailedRun.status}", Error = "${savedFailedRun.errorMessage}"`);
+  console.log(`âœ… Search run error state stored: Status = "${savedFailedRun.status}", Error = "${savedFailedRun.errorMessage}"`);
   if (savedFailedRun.status !== 'failed' || !savedFailedRun.errorMessage) {
     throw new Error('Error recovery check failed: Search failure was not properly logged in database.');
   }
 
-  // ── 6. Complete End-to-End Onboarding-to-Report Workflow ───────────────────
-  console.log('\n6️⃣ Running Complete End-to-End Workflow (Onboarding → Competitors → Keywords → Actions → Report → PDF → Notification)...');
+  // â”€â”€ 6. Complete End-to-End Onboarding-to-Report Workflow â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  console.log('\n6ï¸âƒ£ Running Complete End-to-End Workflow (Onboarding â†’ Competitors â†’ Keywords â†’ Actions â†’ Report â†’ PDF â†’ Notification)...');
 
   // A. Seed Confirmed Competitor
   const [testComp] = await db
@@ -224,7 +224,7 @@ async function main() {
       status: 'confirmed',
     })
     .returning();
-  console.log(`✅ Step 1: Seeded confirmed competitor "${testComp.name}" (confidence: ${testComp.confidenceScore})`);
+  console.log(`âœ… Step 1: Seeded confirmed competitor "${testComp.name}" (confidence: ${testComp.confidenceScore})`);
 
   // B. Seed Keywords & Ranking Observations
   const [kw1] = await db
@@ -247,7 +247,7 @@ async function main() {
     rank: 4,
     resultType: 'organic',
   });
-  console.log(`✅ Step 2: Tracked keyword "${kw1.phrase}" with initial rank #4`);
+  console.log(`âœ… Step 2: Tracked keyword "${kw1.phrase}" with initial rank #4`);
 
   // C. Recommendation Engine (Evidence-grounded 3 to 5 actions)
   const actionPlan = await generateRecommendations({
@@ -285,7 +285,7 @@ async function main() {
     ],
   });
 
-  console.log(`✅ Step 3: Generated ${actionPlan.length} evidence-backed action recommendations.`);
+  console.log(`âœ… Step 3: Generated ${actionPlan.length} evidence-backed action recommendations.`);
   if (actionPlan.length < 1 || actionPlan.length > 5) {
     throw new Error(`Recommendation count outside bounds: expected 1 to 5, got ${actionPlan.length}`);
   }
@@ -367,7 +367,7 @@ async function main() {
     }
   }
 
-  console.log(`✅ Step 4: Persisted Report ${persistedReport.id} with ${actionPlan.length} recommendations and linked source evidence.`);
+  console.log(`âœ… Step 4: Persisted Report ${persistedReport.id} with ${actionPlan.length} recommendations and linked source evidence.`);
 
   // F. Render PDF Buffer
   const pdfBuffer = await generateReportPdf({
@@ -378,7 +378,7 @@ async function main() {
     report: reportDoc,
   });
 
-  console.log(`✅ Step 5: Rendered PDF export (${pdfBuffer.length} bytes, PDF signature: ${pdfBuffer.slice(0, 4).toString()})`);
+  console.log(`âœ… Step 5: Rendered PDF export (${pdfBuffer.length} bytes, PDF signature: ${pdfBuffer.slice(0, 4).toString()})`);
   if (!pdfBuffer.slice(0, 4).toString().includes('%PDF')) {
     throw new Error('PDF signature invalid');
   }
@@ -393,18 +393,18 @@ async function main() {
     report: reportDoc,
   });
 
-  console.log(`✅ Step 6: Dispatched notification (Status: ${notifResult.success ? 'SENT' : 'LOGGED'}, ID: ${notifResult.notificationId})`);
+  console.log(`âœ… Step 6: Dispatched notification (Status: ${notifResult.success ? 'SENT' : 'LOGGED'}, ID: ${notifResult.notificationId})`);
 
   // Clean up test workspaces
   await db.delete(workspaces).where(eq(workspaces.id, wsAlpha.id));
   await db.delete(workspaces).where(eq(workspaces.id, wsBeta.id));
-  console.log('✅ Step 7: Cleaned up test multi-tenant workspaces and verified cascading deletion.');
+  console.log('âœ… Step 7: Cleaned up test multi-tenant workspaces and verified cascading deletion.');
 
-  console.log('\n🎉 ALL MILESTONE 9 QUALITY, SECURITY & LAUNCH CHECKS PASSED! 🎉');
+  console.log('\nðŸŽ‰ ALL MILESTONE 9 QUALITY, SECURITY & LAUNCH CHECKS PASSED! ðŸŽ‰');
   process.exit(0);
 }
 
 main().catch((err) => {
-  console.error('\n❌ Milestone 9 verification failed:', err);
+  console.error('\nâŒ Milestone 9 verification failed:', err);
   process.exit(1);
 });

@@ -85,6 +85,33 @@ export async function scheduleStaleCheck(): Promise<void> {
 }
 
 /**
+ * Registers the periodic catch-up reconciliation (every 6 hours, offset from
+ * the stale check so they never contend on the same tick).
+ *
+ * The boot-time pass repairs an outage that just ended; this pass catches an
+ * occurrence skipped by a deploy, a lost repeat job, or a Redis flush while the
+ * process was otherwise up.
+ */
+export async function scheduleCatchUp(): Promise<void> {
+  const repeatableJobs = await staleQueue.getRepeatableJobs();
+  const alreadyScheduled = repeatableJobs.some((j) => j.name === 'recurring-catch-up');
+
+  if (!alreadyScheduled) {
+    await staleQueue.add(
+      'recurring-catch-up',
+      {},
+      {
+        repeat: {
+          pattern: '15 */6 * * *',
+        },
+        jobId: 'system-catch-up',
+      }
+    );
+    console.log('[Scheduler] Registered catch-up reconciliation job (every 6 hours).');
+  }
+}
+
+/**
  * Immediately enqueues an on-demand research & report run.
  */
 export async function triggerImmediateRefresh(params: {
@@ -120,6 +147,7 @@ export async function syncAllWorkspaceSchedules(): Promise<void> {
 
   try {
     await scheduleStaleCheck();
+    await scheduleCatchUp();
 
     const allWorkspaces = await db.select().from(workspaces);
     for (const ws of allWorkspaces) {

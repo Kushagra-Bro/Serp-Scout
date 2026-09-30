@@ -10,7 +10,6 @@ import {
   Star,
   MessageSquare,
   Sparkles,
-  TrendingUp,
   AlertCircle,
   CheckCircle2,
   ExternalLink,
@@ -39,6 +38,9 @@ import {
   Sliders,
   Globe,
 } from 'lucide-react';
+import ErrorBanner from '@/components/ErrorBanner';
+import LocalSeoHeader from '@/components/local/LocalSeoHeader';
+import LocalStatCards from '@/components/local/LocalStatCards';
 
 interface BusinessSummary {
   id: string;
@@ -487,157 +489,35 @@ export default function LocalSeoPage() {
   return (
     <div className="space-y-8 animate-fade-in">
       {/* ── 1. HEADER WITH BUSINESS SELECTOR ── */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-slate-200">
-        <div>
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-600 to-cyan-600 text-white flex items-center justify-center shadow-sm">
-              <MapPin className="w-5 h-5" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
-                Local SEO & Google Maps
-              </h1>
-              <p className="text-xs text-slate-500 font-medium">
-                Track Google Maps 3-Pack positions, sentiment gaps, and local competitor proximity.
-              </p>
-            </div>
-          </div>
-        </div>
+      <LocalSeoHeader
+        businesses={businesses}
+        selectedBizId={selectedBizId}
+        scanning={scanning}
+        onScan={() => handleScanMaps()}
+        onBusinessChange={(newId) => {
+          const b = businesses.find((biz) => biz.id === newId);
+          setSelectedBizId(newId);
+          if (typeof window !== 'undefined') {
+            try {
+              localStorage.setItem('serp_scout_active_biz_id', newId);
+            } catch (err) {}
+          }
+          if (b) {
+            setLocation(b.city || '');
+            setQuery(`${b.industry || 'Services'} in ${b.city || 'Austin'}`);
+          }
+        }}
+      />
 
-        <div className="flex items-center gap-3">
-          {businesses.length > 1 && (
-            <select
-              value={selectedBizId}
-              onChange={(e) => {
-                const newId = e.target.value;
-                const b = businesses.find((biz) => biz.id === newId);
-                setSelectedBizId(newId);
-                if (typeof window !== 'undefined') {
-                  try {
-                    localStorage.setItem('serp_scout_active_biz_id', newId);
-                  } catch (err) {}
-                }
-                if (b) {
-                  setLocation(b.city || '');
-                  setQuery(`${b.industry || 'Services'} in ${b.city || 'Austin'}`);
-                }
-              }}
-              className="px-3 py-2 text-xs font-semibold rounded-lg bg-white border border-slate-300 text-slate-700 shadow-xs focus:ring-2 focus:ring-indigo-500 outline-none"
-            >
-              {businesses.map((biz) => (
-                <option key={biz.id} value={biz.id}>
-                  {biz.name} ({biz.city || 'Local'})
-                </option>
-              ))}
-            </select>
-          )}
-
-          <button
-            onClick={() => handleScanMaps()}
-            disabled={scanning}
-            className="px-4 py-2 text-xs font-semibold rounded-lg bg-gradient-to-r from-indigo-600 to-cyan-600 text-white hover:opacity-95 shadow-sm transition disabled:opacity-50 flex items-center gap-2"
-          >
-            {scanning ? (
-              <>
-                <span className="h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
-                Auditing Maps 3-Pack...
-              </>
-            ) : (
-              <>
-                <Search className="w-3.5 h-3.5" />
-                Live Maps Audit
-              </>
-            )}
-          </button>
-        </div>
-      </div>
-
-      {error && (
-        <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-xs font-medium text-rose-700 flex items-center gap-2 animate-fade-in">
-          <AlertCircle className="w-4 h-4 shrink-0" />
-          <span>{error}</span>
-        </div>
-      )}
+      <ErrorBanner message={error} />
 
       {/* ── 2. STATS & QUICK HIGHLIGHTS (COMPUTED LIVE FROM AUDIT DATA) ── */}
-      {(() => {
-        const selectedBiz = businesses.find((b) => b.id === selectedBizId);
-        const myRankItem = mapResults.find(
-          (m) =>
-            (selectedBiz?.name && m.title.toLowerCase().includes(selectedBiz.name.toLowerCase())) ||
-            (selectedBiz?.websiteUrl && m.url && m.url.includes(new URL(selectedBiz.websiteUrl).hostname.replace(/^www\./, '')))
-        );
-
-        const averageRivalRating =
-          mapResults.length > 0
-            ? (
-                mapResults.reduce((acc, curr) => acc + (parseFloat(curr.rating || '0') || 0), 0) /
-                (mapResults.filter((m) => m.rating).length || 1)
-              ).toFixed(1)
-            : '4.8';
-
-        const totalReviewsAudited = mapResults.reduce(
-          (acc, curr) => acc + (curr.reviewCount || 0),
-          0
-        );
-
-        return (
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
-            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs hover:-translate-y-0.5 hover:shadow-md transition-all duration-200">
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                  Google Maps 3-Pack Presence
-                </span>
-                <span className={`p-1.5 rounded-lg ${myRankItem && myRankItem.rank <= 3 ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'}`}>
-                  <CheckCircle2 className="w-4 h-4" />
-                </span>
-              </div>
-              <div className="text-2xl font-black text-slate-900 mt-2">
-                {myRankItem ? `#${myRankItem.rank} in 3-Pack` : mapResults.length > 0 ? 'Top 10 Contender' : 'Awaiting Audit'}
-              </div>
-              <p className="text-xs text-slate-500 mt-1">
-                {myRankItem ? `Ranked #${myRankItem.rank} in local customer radius` : `${mapResults.length} local competitors analyzed`}
-              </p>
-            </div>
-
-            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs hover:-translate-y-0.5 hover:shadow-md transition-all duration-200">
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                  Local Pack Rating Benchmark
-                </span>
-                <span className="p-1.5 rounded-lg bg-amber-50 text-amber-600">
-                  <Star className="w-4 h-4" />
-                </span>
-              </div>
-              <div className="text-2xl font-black text-indigo-600 mt-2 flex items-center gap-1.5">
-                <span>{myRankItem?.rating || averageRivalRating}</span>
-                <Star className="w-5 h-5 fill-amber-400 text-amber-400" />
-                <span className="text-sm font-semibold text-slate-400">
-                  ({myRankItem ? `${myRankItem.reviewCount || 0} reviews` : `avg ${averageRivalRating}`})
-                </span>
-              </div>
-              <p className="text-xs text-slate-500 mt-1">
-                {totalReviewsAudited > 0 ? `${totalReviewsAudited} total customer reviews benchmarked` : 'Direct trust differentiator against rivals'}
-              </p>
-            </div>
-
-            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs hover:-translate-y-0.5 hover:shadow-md transition-all duration-200">
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                  Audited Target Territory
-                </span>
-                <span className="p-1.5 rounded-lg bg-cyan-50 text-cyan-600">
-                  <TrendingUp className="w-4 h-4" />
-                </span>
-              </div>
-              <div className="text-2xl font-black text-cyan-700 mt-2 truncate">
-                {location ? location : 'Indirapuram'}
-              </div>
-              <p className="text-xs text-slate-500 mt-1">Direct phone calls & directions focused</p>
-            </div>
-          </div>
-        );
-      })()}
+      <LocalStatCards
+        businesses={businesses}
+        selectedBizId={selectedBizId}
+        mapResults={mapResults}
+        location={location}
+      />
 
       {/* ── 3. TAB NAVIGATION ── */}
       <div className="flex items-center gap-1 sm:gap-2 border-b border-slate-200 overflow-x-auto pb-px">

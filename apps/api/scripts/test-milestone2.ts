@@ -4,16 +4,16 @@ import {
   parseWebsiteHtml,
   analyzeWebsite,
 } from '@serp-scout/agents';
-import { db, workspaces, businesses, services, keywords } from './db/index.js';
+import { db, workspaces, businesses, services, keywords } from '../src/db/index.js';
 import { eq } from 'drizzle-orm';
-import { websiteAnalysisQueue } from './jobs/queues.js';
-import { startWebsiteAnalysisWorker } from './jobs/workers/research.worker.js';
+import { websiteAnalysisQueue } from '../src/jobs/queues.js';
+import { startWebsiteAnalysisWorker } from '../src/jobs/workers/research.worker.js';
 
 async function main() {
-  console.log('🧪 Starting Milestone 2: Website Analyzer verification...\n');
+  console.log('ðŸ§ª Starting Milestone 2: Website Analyzer verification...\n');
 
   // 1. SSRF & Private IP Security Checks
-  console.log('1️⃣ Testing SSRF Protection & IP filtering...');
+  console.log('1ï¸âƒ£ Testing SSRF Protection & IP filtering...');
   const testCases = [
     { target: '127.0.0.1', isPrivate: true },
     { target: '169.254.169.254', isPrivate: true },
@@ -45,13 +45,13 @@ async function main() {
       throw new Error(`Security validation failed: "${bad}" should have been rejected!`);
     } catch (err: any) {
       // Expected rejection
-      console.log(`  🛡️ Correctly blocked unsafe URL: "${bad}" (${err.message.split('\n')[0]})`);
+      console.log(`  ðŸ›¡ï¸ Correctly blocked unsafe URL: "${bad}" (${err.message.split('\n')[0]})`);
     }
   }
-  console.log('✅ SSRF and private IP protection verified.\n');
+  console.log('âœ… SSRF and private IP protection verified.\n');
 
   // 2. HTML Parser unit check
-  console.log('2️⃣ Testing Cheerio HTML extractor with mock business landing page...');
+  console.log('2ï¸âƒ£ Testing Cheerio HTML extractor with mock business landing page...');
   const sampleHtml = `
     <!DOCTYPE html>
     <html lang="en">
@@ -88,13 +88,13 @@ async function main() {
   ) {
     throw new Error('HTML parsing did not extract expected elements from sample HTML');
   }
-  console.log(`✅ Extracted title: "${parsed.title}"`);
-  console.log(`✅ Extracted H1s: ${JSON.stringify(parsed.h1)}`);
-  console.log(`✅ Extracted CTAs: ${JSON.stringify(parsed.callsToAction)}`);
-  console.log(`✅ Extracted Phone: ${parsed.phones[0]}`);
+  console.log(`âœ… Extracted title: "${parsed.title}"`);
+  console.log(`âœ… Extracted H1s: ${JSON.stringify(parsed.h1)}`);
+  console.log(`âœ… Extracted CTAs: ${JSON.stringify(parsed.callsToAction)}`);
+  console.log(`âœ… Extracted Phone: ${parsed.phones[0]}`);
 
   // 3. Groq AI Website Analysis check
-  console.log('\n3️⃣ Testing Groq AI structured enrichment on live public test website...');
+  console.log('\n3ï¸âƒ£ Testing Groq AI structured enrichment on live public test website...');
   const realTestUrl = 'https://example.com';
   const analysis = await analyzeWebsite(realTestUrl, {
     businessNameHint: 'Austin Smile Studio',
@@ -106,12 +106,12 @@ async function main() {
     throw new Error('Groq AI analysis did not return expected WebsiteAnalysis structure');
   }
 
-  console.log(`✅ AI Category: "${analysis.detectedCategory}"`);
-  console.log(`✅ Extracted Candidate Keywords: ${JSON.stringify(analysis.candidateKeywords)}`);
-  console.log(`✅ Missing Opportunities: ${JSON.stringify(analysis.missingOpportunities)}`);
+  console.log(`âœ… AI Category: "${analysis.detectedCategory}"`);
+  console.log(`âœ… Extracted Candidate Keywords: ${JSON.stringify(analysis.candidateKeywords)}`);
+  console.log(`âœ… Missing Opportunities: ${JSON.stringify(analysis.missingOpportunities)}`);
 
   // 4. BullMQ Worker End-to-End Pipeline test
-  console.log('\n4️⃣ Testing BullMQ Website Analysis Worker end-to-end pipeline...');
+  console.log('\n4ï¸âƒ£ Testing BullMQ Website Analysis Worker end-to-end pipeline...');
   const testUserId = 'worker_test_user_' + Math.random().toString(36).substring(2, 7);
 
   // Setup test workspace & business in Neon
@@ -158,7 +158,7 @@ async function main() {
     if (state === 'failed') {
       throw new Error(`Worker job failed: ${job.failedReason}`);
     }
-    console.log(`✅ Job ${job.id} finished with state: ${state}!`);
+    console.log(`âœ… Job ${job.id} finished with state: ${state}!`);
 
     // Verify DB update
     const [updatedBiz] = await db
@@ -175,16 +175,16 @@ async function main() {
       .from(keywords)
       .where(eq(keywords.businessId, biz.id));
 
-    console.log(`✅ Business lastAnalyzedAt updated: ${updatedBiz.lastAnalyzedAt.toISOString()}`);
-    console.log(`✅ Keywords seeded in database: ${seededKeywords.length} items`);
+    console.log(`âœ… Business lastAnalyzedAt updated: ${updatedBiz.lastAnalyzedAt.toISOString()}`);
+    console.log(`âœ… Keywords seeded in database: ${seededKeywords.length} items`);
   } finally {
     // Close worker and clean up test data
     await worker.close();
     await db.delete(workspaces).where(eq(workspaces.id, ws.id));
-    console.log('✅ Cleaned up test records from database.');
+    console.log('âœ… Cleaned up test records from database.');
   }
 
-  console.log('\n🎉 Milestone 2 verification PASSED! Website Analyzer pipeline is fully operational.');
+  console.log('\nðŸŽ‰ Milestone 2 verification PASSED! Website Analyzer pipeline is fully operational.');
   process.exit(0);
 }
 

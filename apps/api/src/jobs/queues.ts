@@ -82,11 +82,18 @@ export const staleQueue = new Queue('stale-check', {
   },
 });
 
+// 5. LangGraph Research Pipeline Queue
+export const researchGraphQueue = new Queue('research-graph', {
+  connection: redisConnection,
+  defaultJobOptions,
+});
+
 export const allQueues = [
   websiteAnalysisQueue,
   researchQueue,
   reportQueue,
   staleQueue,
+  researchGraphQueue,
 ];
 
 export interface UnifiedJobInfo {

@@ -12,15 +12,15 @@ import {
   competitors,
   contentGaps,
   reviewThemes,
-} from './db/index.js';
+} from '../src/db/index.js';
 import { eq, and } from 'drizzle-orm';
-import { env } from './config/env.js';
+import { env } from '../src/config/env.js';
 
 async function main() {
-  console.log('🧪 Starting Milestone 6: SEO & Market Analysis Agents verification...\n');
+  console.log('ðŸ§ª Starting Milestone 6: SEO & Market Analysis Agents verification...\n');
 
   // 1. Test Content Gap Agent
-  console.log('1️⃣ Testing Content Gap Agent...');
+  console.log('1ï¸âƒ£ Testing Content Gap Agent...');
   const testBusiness = {
     name: 'Austin Modern Dentistry',
     websiteUrl: 'https://austinmoderndentistry.example.com',
@@ -65,10 +65,10 @@ async function main() {
   if (gaps.length === 0 || !gaps[0].suggestedTitle || !gaps[0].priority) {
     throw new Error('Content Gap agent failed to generate structured gap recommendations');
   }
-  console.log('✅ Content Gap Agent verified.');
+  console.log('âœ… Content Gap Agent verified.');
 
   // 2. Test Competitor Messaging Analysis Agent
-  console.log('\n2️⃣ Testing Competitor Messaging Analysis Agent...');
+  console.log('\n2ï¸âƒ£ Testing Competitor Messaging Analysis Agent...');
   const messaging = await analyzeCompetitorMessaging({
     business: testBusiness,
     competitorData: testCompetitors,
@@ -88,10 +88,10 @@ async function main() {
       throw new Error('Messaging analysis must separate observed facts, interpretation, and action');
     }
   }
-  console.log('✅ Competitor Messaging Analysis Agent verified.');
+  console.log('âœ… Competitor Messaging Analysis Agent verified.');
 
   // 3. Test Customer Review (VoC) Analysis Agent
-  console.log('\n3️⃣ Testing Customer Review Analysis Agent...');
+  console.log('\n3ï¸âƒ£ Testing Customer Review Analysis Agent...');
   const sampleReviews = [
     {
       competitorName: 'Apex Dental Care',
@@ -127,10 +127,10 @@ async function main() {
   if (reviewVoC.themes.length === 0 || reviewVoC.websiteCopyOpportunities.length === 0) {
     throw new Error('Review VoC agent failed to extract themes or copy opportunities');
   }
-  console.log('✅ Customer Review Analysis Agent verified.');
+  console.log('âœ… Customer Review Analysis Agent verified.');
 
   // 4. Test Google News Signals Agent
-  console.log('\n4️⃣ Testing Google News Monitor Agent...');
+  console.log('\n4ï¸âƒ£ Testing Google News Monitor Agent...');
   const newsSignals = await analyzeNewsSignals({
     business: testBusiness,
     articles: [
@@ -161,10 +161,10 @@ async function main() {
   if (newsSignals.length !== 2 || !newsSignals[0].category) {
     throw new Error('News signals agent failed to classify articles');
   }
-  console.log('✅ Google News Monitor Agent verified.');
+  console.log('âœ… Google News Monitor Agent verified.');
 
   // 5. Test SERP Change Detector
-  console.log('\n5️⃣ Testing SERP Change Detector...');
+  console.log('\n5ï¸âƒ£ Testing SERP Change Detector...');
   const prevRun = [
     { rank: 1, domain: 'apexdental.example.com', url: 'https://apexdental.example.com', title: 'Apex Dental' },
     { rank: 2, domain: 'socodental.example.com', url: 'https://socodental.example.com', title: 'SoCo Dental' },
@@ -200,10 +200,10 @@ async function main() {
   if (changeDiff.newEntrants.length !== 1 || changeDiff.newEntrants[0].domain !== 'newrival.example.com') {
     throw new Error('Change detector missed new top 10 entrant');
   }
-  console.log('✅ SERP Change Detector verified.');
+  console.log('âœ… SERP Change Detector verified.');
 
   // 6. Database Persistence & Update verification
-  console.log('\n6️⃣ Testing Database Persistence for Content Gaps & Review Themes...');
+  console.log('\n6ï¸âƒ£ Testing Database Persistence for Content Gaps & Review Themes...');
   const testUserId = 'test_analysis_user_' + Math.random().toString(36).substring(2, 7);
 
   const [testWs] = await db
@@ -241,7 +241,7 @@ async function main() {
     })
     .returning();
 
-  console.log(`✅ Persisted Content Gap "${createdGap.topic}" (ID: ${createdGap.id}, Priority: ${createdGap.priority})`);
+  console.log(`âœ… Persisted Content Gap "${createdGap.topic}" (ID: ${createdGap.id}, Priority: ${createdGap.priority})`);
 
   // Update status to 'in_progress'
   const [updatedGap] = await db
@@ -266,16 +266,16 @@ async function main() {
     })
     .returning();
 
-  console.log(`✅ Persisted Review Theme "${createdTheme.theme}" (Sentiment: ${createdTheme.sentiment})`);
+  console.log(`âœ… Persisted Review Theme "${createdTheme.theme}" (Sentiment: ${createdTheme.sentiment})`);
 
   // Cleanup test workspace
   await db.delete(workspaces).where(eq(workspaces.id, testWs.id));
-  console.log('✅ Cleaned up test database resources.');
+  console.log('âœ… Cleaned up test database resources.');
 
-  console.log('\n🎉 ALL MILESTONE 6 VERIFICATION CHECKS PASSED SUCCESSFULLY! 🎉');
+  console.log('\nðŸŽ‰ ALL MILESTONE 6 VERIFICATION CHECKS PASSED SUCCESSFULLY! ðŸŽ‰');
 }
 
 main().catch((err) => {
-  console.error('\n❌ Milestone 6 verification failed:', err);
+  console.error('\nâŒ Milestone 6 verification failed:', err);
   process.exit(1);
 });

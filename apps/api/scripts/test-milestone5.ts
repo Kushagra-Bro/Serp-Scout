@@ -13,19 +13,19 @@ import {
   competitors,
   searchRuns,
   rankingObservations,
-} from './db/index.js';
+} from '../src/db/index.js';
 import { eq, and } from 'drizzle-orm';
-import { env } from './config/env.js';
+import { env } from '../src/config/env.js';
 import {
   recordRankingObservations,
   getRankingsForBusiness,
-} from './services/ranking.service.js';
+} from '../src/services/ranking.service.js';
 
 async function main() {
-  console.log('🧪 Starting Milestone 5: Keyword & Ranking Monitoring verification...\n');
+  console.log('ðŸ§ª Starting Milestone 5: Keyword & Ranking Monitoring verification...\n');
 
   // 1. Test Candidate Keyword Generation
-  console.log('1️⃣ Testing Keyword Candidate Generator...');
+  console.log('1ï¸âƒ£ Testing Keyword Candidate Generator...');
   const candidatePhrases = generateKeywordCandidates({
     businessName: 'Austin Smile Studio',
     category: 'Cosmetic Dentist',
@@ -44,10 +44,10 @@ async function main() {
   if (candidatePhrases.length < 5) {
     throw new Error('Keyword generator failed to generate sufficient candidate phrases');
   }
-  console.log('✅ Candidate keyword generation verified.');
+  console.log('âœ… Candidate keyword generation verified.');
 
   // 2. Test Groq Intent Classifier & Opportunity Scorer
-  console.log('\n2️⃣ Testing Groq AI Intent Classifier & Scoring...');
+  console.log('\n2ï¸âƒ£ Testing Groq AI Intent Classifier & Scoring...');
   const testPhrase = 'emergency dentist Austin TX';
   const intentResult = await classifyKeywordIntent(
     testPhrase,
@@ -72,7 +72,7 @@ async function main() {
   }
 
   // Test Weighted Opportunity Scorer
-  console.log('\n3️⃣ Testing Weighted Opportunity Scorer Formula...');
+  console.log('\n3ï¸âƒ£ Testing Weighted Opportunity Scorer Formula...');
   // 30% relevance + 25% commercial + 20% ranking potential + 15% local fit + 10% content gap
   const directOppResult = computeOpportunityScore({
     businessRelevance: 90, // direct service match
@@ -98,10 +98,10 @@ async function main() {
     bestCompetitorRank: 2,
   });
   console.log(`   Calculated Opportunity Score for Emergency Query: ${moderateOppResult.score}/100`);
-  console.log('✅ Opportunity scorer formula verified.');
+  console.log('âœ… Opportunity scorer formula verified.');
 
   // 4. Test Full Discovery Pipeline
-  console.log('\n4️⃣ Testing Complete Keyword Discovery Pipeline...');
+  console.log('\n4ï¸âƒ£ Testing Complete Keyword Discovery Pipeline...');
   const discovered = await discoverKeywords({
     business: {
       name: 'Austin Smile Studio',
@@ -117,10 +117,10 @@ async function main() {
   for (const k of discovered.slice(0, 4)) {
     console.log(`   - "${k.phrase}" -> Intent: ${k.intent}, Opportunity Score: ${k.opportunityScore}`);
   }
-  console.log('✅ Keyword discovery pipeline successfully executed.');
+  console.log('âœ… Keyword discovery pipeline successfully executed.');
 
   // 5. Database Persistence, Observations & Delta Calculation
-  console.log('\n5️⃣ Testing DB Persistence, Ranking Observations & Delta Tracking...');
+  console.log('\n5ï¸âƒ£ Testing DB Persistence, Ranking Observations & Delta Tracking...');
   const testUserId = 'test_kw_user_' + Math.random().toString(36).substring(2, 7);
 
   const [testWs] = await db
@@ -166,7 +166,7 @@ async function main() {
     })
     .returning();
 
-  console.log(`✅ Created tracking keyword "${testKw.phrase}" (ID: ${testKw.id})`);
+  console.log(`âœ… Created tracking keyword "${testKw.phrase}" (ID: ${testKw.id})`);
 
   // Insert valid search runs for foreign key
   const [run1] = await db
@@ -226,16 +226,16 @@ async function main() {
   if (rankings[0].currentRank !== 4 || rankings[0].previousRank !== 8 || rankings[0].delta !== 4) {
     throw new Error(`Delta calculation failed: expected +4, got ${rankings[0].delta}`);
   }
-  console.log('✅ Historical ranking delta correctly calculated as +4 position improvement!');
+  console.log('âœ… Historical ranking delta correctly calculated as +4 position improvement!');
 
   // Cleanup test workspace
   await db.delete(workspaces).where(eq(workspaces.id, testWs.id));
-  console.log('✅ Cleaned up test database resources.');
+  console.log('âœ… Cleaned up test database resources.');
 
-  console.log('\n🎉 ALL MILESTONE 5 VERIFICATION CHECKS PASSED SUCCESSFULLY! 🎉');
+  console.log('\nðŸŽ‰ ALL MILESTONE 5 VERIFICATION CHECKS PASSED SUCCESSFULLY! ðŸŽ‰');
 }
 
 main().catch((err) => {
-  console.error('\n❌ Milestone 5 verification failed:', err);
+  console.error('\nâŒ Milestone 5 verification failed:', err);
   process.exit(1);
 });

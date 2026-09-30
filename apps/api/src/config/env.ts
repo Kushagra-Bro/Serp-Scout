@@ -22,7 +22,10 @@ const envSchema = z.object({
   SERPAPI_KEY: z.string().min(1, 'SERPAPI_KEY is required'),
   TAVILY_API_KEY: z.string().optional(),
   GROQ_API_KEY: z.string().min(1, 'GROQ_API_KEY is required'),
-  GROQ_MODEL: z.string().default('llama-3.3-70b-versatile'),
+  // Must stay in sync with DEFAULT_GROQ_MODEL in @serp-scout/agents, which reads
+  // process.env.GROQ_MODEL directly. Agents cannot import this module (it lives
+  // in the app layer), so the two defaults are kept identical by convention.
+  GROQ_MODEL: z.string().default('openai/gpt-oss-120b'),
   RESEND_API_KEY: z.string().optional(),
   EMAIL_FROM: z.string().default('noreply@serp-scout.app'),
   FRONTEND_URL: z.string().default('http://localhost:3000'),

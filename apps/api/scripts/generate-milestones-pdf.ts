@@ -2,7 +2,7 @@ import puppeteer from 'puppeteer';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { findChromiumExecutable } from './services/pdf.service.js';
+import { findChromiumExecutable } from '../src/services/pdf.service.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -11,7 +11,7 @@ function generatePlatformPdfHtml(): string {
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Serp-Scout — Complete Platform Architecture & Milestones Guide</title>
+  <title>Serp-Scout â€” Complete Platform Architecture & Milestones Guide</title>
   <style>
     @page {
       size: A4;
@@ -355,7 +355,7 @@ function generatePlatformPdfHtml(): string {
 
       <h2 style="margin-top: 14px; font-size: 12.5px; border-bottom: 1px solid #cbd5e1; padding-bottom: 4px;">Executive Purpose &amp; Problem Space</h2>
       <p style="font-size: 10px; color: #334155; line-height: 1.5; margin-bottom: 8px;">
-        Traditional search engine optimization platforms (Semrush, Ahrefs, Moz) are designed for full-time SEO practitioners and agency teams. They inundate users with raw metrics such as Domain Rating (DR), Page Authority (PA), aggregate search impressions, and hundreds of minor technical audits. For small business operators—such as dentists, contractors, accountants, legal practitioners, and local service providers—these abstractions do not translate into appointments, phone inquiries, or sales.
+        Traditional search engine optimization platforms (Semrush, Ahrefs, Moz) are designed for full-time SEO practitioners and agency teams. They inundate users with raw metrics such as Domain Rating (DR), Page Authority (PA), aggregate search impressions, and hundreds of minor technical audits. For small business operatorsâ€”such as dentists, contractors, accountants, legal practitioners, and local service providersâ€”these abstractions do not translate into appointments, phone inquiries, or sales.
       </p>
       <p style="font-size: 10px; color: #334155; line-height: 1.5; margin-bottom: 10px;">
         <strong>Serp-Scout</strong> solves this disconnect by combining real-time local search telemetry (Google Web, Local Map Packs, and News) with an autonomous multi-agent reasoning graph. Rather than generating endless checklists, Serp-Scout extracts concrete competitor positioning, detects local content and service gaps, scores keyword opportunity, and synthesizes <strong>maximum 3 to 5 prioritized, high-leverage actions</strong> for the business each week.
@@ -411,7 +411,7 @@ function generatePlatformPdfHtml(): string {
   <!-- ==================== SECTION 1: EXECUTIVE SUMMARY & PHILOSOPHY ==================== -->
   <div class="header-bar">
     <div>
-      <div class="header-title">SERP-SCOUT — PLATFORM ARCHITECTURE & MILESTONES GUIDE</div>
+      <div class="header-title">SERP-SCOUT â€” PLATFORM ARCHITECTURE & MILESTONES GUIDE</div>
       <div class="header-tagline">1. Executive Summary & Philosophy</div>
     </div>
     <div class="header-meta">Section 1 &bull; Core Identity</div>
@@ -432,11 +432,11 @@ function generatePlatformPdfHtml(): string {
   <div class="grid-3">
     <div class="card">
       <div class="card-title">1. Rival Detection</div>
-      <p class="card-desc"><strong>Who is taking revenue?</strong> Identifies the true 3–5 direct local business rivals occupying high-conversion SERP real estate, completely filtering out non-competing aggregators like Yelp or YellowPages.</p>
+      <p class="card-desc"><strong>Who is taking revenue?</strong> Identifies the true 3â€“5 direct local business rivals occupying high-conversion SERP real estate, completely filtering out non-competing aggregators like Yelp or YellowPages.</p>
     </div>
     <div class="card">
       <div class="card-title">2. Opportunity Detection</div>
-      <p class="card-desc"><strong>Where are the gaps?</strong> Discovers striking-distance keywords (ranks #4–20), missing service landing pages, and weak competitor reputation signals where the business can readily win.</p>
+      <p class="card-desc"><strong>Where are the gaps?</strong> Discovers striking-distance keywords (ranks #4â€“20), missing service landing pages, and weak competitor reputation signals where the business can readily win.</p>
     </div>
     <div class="card">
       <div class="card-title">3. Action Delivery</div>
@@ -482,7 +482,7 @@ function generatePlatformPdfHtml(): string {
   <!-- ==================== SECTION 2: SYSTEM ARCHITECTURE ==================== -->
   <div class="header-bar">
     <div>
-      <div class="header-title">SERP-SCOUT — PLATFORM ARCHITECTURE & MILESTONES GUIDE</div>
+      <div class="header-title">SERP-SCOUT â€” PLATFORM ARCHITECTURE & MILESTONES GUIDE</div>
       <div class="header-tagline">2. System Architecture & Component Design</div>
     </div>
     <div class="header-meta">Section 2 &bull; Technical Topology</div>
@@ -548,7 +548,7 @@ function generatePlatformPdfHtml(): string {
   <!-- ==================== SECTION 3: LANGGRAPH & GROQ PIPELINE ==================== -->
   <div class="header-bar">
     <div>
-      <div class="header-title">SERP-SCOUT — PLATFORM ARCHITECTURE & MILESTONES GUIDE</div>
+      <div class="header-title">SERP-SCOUT â€” PLATFORM ARCHITECTURE & MILESTONES GUIDE</div>
       <div class="header-tagline">3. LangGraph & Groq Autonomous Multi-Agent Pipeline</div>
     </div>
     <div class="header-meta">Section 3 &bull; Multi-Agent Intelligence</div>
@@ -563,57 +563,57 @@ function generatePlatformPdfHtml(): string {
   <h2>A. Research Graph Architecture (<span class="code-pill">research-graph.ts</span>)</h2>
   <div class="arch-diagram">
 [START]
-  │
-  ▼
-[websiteAnalyzerNode]          ← Cheerio DOM parser + DNS SSRF filter + Groq profile extraction
-  │
-  ▼
-[queryPlannerNode]             ← Generates localized service × geo × problem query permutations
-  │
-  ▼
-[serpRunnerNode]               ← Parallel fan-out via LangGraph Send (Google Web, Maps, News)
-  │
-  ▼
-[competitorClassifierNode]     ← Groq structured output: separates direct rivals from directories
-  │
-  ▼
-[competitorScorerNode]         ← Deterministic 5-factor mathematical scoring formula (0–100)
-  │
-  ├───(If confirmed rivals exist)──▶ [contentGapNode]     (Groq LLaMA 3.3 70B)
-  ├───────────────────────────────▶ [messagingNode]      (Groq LLaMA 3.3 70B)
-  ├───────────────────────────────▶ [reviewAnalysisNode] (Groq LLaMA 3.3 70B)
-  └───────────────────────────────▶ [newsMonitorNode]    (Groq LLaMA 3.3 70B)
-  │                     (Parallel Agent Fan-Out)
-  ▼
-[changeDetectorNode]           ← Computes ranking delta radar & competitor movement
-  │
-  ▼
-[persistStateNode]             ← Flushes AgentState & source_evidence to Neon PostgreSQL
-  │
-  ▼
+  â”‚
+  â–¼
+[websiteAnalyzerNode]          â† Cheerio DOM parser + DNS SSRF filter + Groq profile extraction
+  â”‚
+  â–¼
+[queryPlannerNode]             â† Generates localized service Ã— geo Ã— problem query permutations
+  â”‚
+  â–¼
+[serpRunnerNode]               â† Parallel fan-out via LangGraph Send (Google Web, Maps, News)
+  â”‚
+  â–¼
+[competitorClassifierNode]     â† Groq structured output: separates direct rivals from directories
+  â”‚
+  â–¼
+[competitorScorerNode]         â† Deterministic 5-factor mathematical scoring formula (0â€“100)
+  â”‚
+  â”œâ”€â”€â”€(If confirmed rivals exist)â”€â”€â–¶ [contentGapNode]     (Groq LLaMA 3.3 70B)
+  â”œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â–¶ [messagingNode]      (Groq LLaMA 3.3 70B)
+  â”œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â–¶ [reviewAnalysisNode] (Groq LLaMA 3.3 70B)
+  â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â–¶ [newsMonitorNode]    (Groq LLaMA 3.3 70B)
+  â”‚                     (Parallel Agent Fan-Out)
+  â–¼
+[changeDetectorNode]           â† Computes ranking delta radar & competitor movement
+  â”‚
+  â–¼
+[persistStateNode]             â† Flushes AgentState & source_evidence to Neon PostgreSQL
+  â”‚
+  â–¼
 [END]
   </div>
 
   <h2>B. Report Generation Graph (<span class="code-pill">report-graph.ts</span>)</h2>
   <div class="arch-diagram">
 [START]
-  │
-  ▼
-[loadEvidenceNode]             ← Retrieves verified rankings, content gaps & competitor deltas from DB
-  │
-  ▼
-[recommendationNode]           ← Groq LLaMA 3.3 70B synthesizes exactly 3–5 high-impact, evidence-backed actions
-  │
-  ▼
-[reportGeneratorNode]          ← Groq generates executive business narrative, opportunity summary & KPIs
-  │
-  ▼
-[pdfRenderNode]                ← Headless Chromium / Puppeteer renders styled publication-grade PDF report
-  │
-  ▼
-[notificationNode]             ← Resend transactional email dispatches PDF & summary to business owner
-  │
-  ▼
+  â”‚
+  â–¼
+[loadEvidenceNode]             â† Retrieves verified rankings, content gaps & competitor deltas from DB
+  â”‚
+  â–¼
+[recommendationNode]           â† Groq LLaMA 3.3 70B synthesizes exactly 3â€“5 high-impact, evidence-backed actions
+  â”‚
+  â–¼
+[reportGeneratorNode]          â† Groq generates executive business narrative, opportunity summary & KPIs
+  â”‚
+  â–¼
+[pdfRenderNode]                â† Headless Chromium / Puppeteer renders styled publication-grade PDF report
+  â”‚
+  â–¼
+[notificationNode]             â† Resend transactional email dispatches PDF & summary to business owner
+  â”‚
+  â–¼
 [END]
   </div>
 
@@ -638,7 +638,7 @@ function generatePlatformPdfHtml(): string {
   <!-- ==================== SECTION 4: SCORING FORMULAS ==================== -->
   <div class="header-bar">
     <div>
-      <div class="header-title">SERP-SCOUT — PLATFORM ARCHITECTURE & MILESTONES GUIDE</div>
+      <div class="header-title">SERP-SCOUT â€” PLATFORM ARCHITECTURE & MILESTONES GUIDE</div>
       <div class="header-tagline">4. Scoring Criteria & Mathematical Calculation Formulas</div>
     </div>
     <div class="header-meta">Section 4 &bull; Algorithmic Logic</div>
@@ -712,28 +712,28 @@ Opportunity Score = (0.30 &times; Relevance) + (0.25 &times; Commercial Intent) 
       <tr>
         <td><strong>Business Relevance</strong></td>
         <td>30%</td>
-        <td>0–100 score from Groq classifier evaluating semantic alignment with the business's declared services and core offering.</td>
+        <td>0â€“100 score from Groq classifier evaluating semantic alignment with the business's declared services and core offering.</td>
       </tr>
       <tr>
         <td><strong>Commercial Intent</strong></td>
         <td>25%</td>
-        <td>0–100 score prioritizing transaction-ready queries ("cost", "near me", "best", "affordable") over purely educational searches.</td>
+        <td>0â€“100 score prioritizing transaction-ready queries ("cost", "near me", "best", "affordable") over purely educational searches.</td>
       </tr>
       <tr>
         <td><strong>Ranking Potential</strong></td>
         <td>20%</td>
         <td>
           Prioritizes <em>striking distance</em> rankings where marginal improvements deliver high traffic gains:<br>
-          &bull; <strong>Ranks #4–10 (Striking Distance, Page 1): 95 pts</strong><br>
-          &bull; Ranks #11–20 (Page 2 Opportunity): 85 pts<br>
-          &bull; Ranks #21–50 (Extended Distance): 70 pts<br>
-          &bull; Ranks #1–3 (Already Dominant): 50 pts (lower upside)
+          &bull; <strong>Ranks #4â€“10 (Striking Distance, Page 1): 95 pts</strong><br>
+          &bull; Ranks #11â€“20 (Page 2 Opportunity): 85 pts<br>
+          &bull; Ranks #21â€“50 (Extended Distance): 70 pts<br>
+          &bull; Ranks #1â€“3 (Already Dominant): 50 pts (lower upside)
         </td>
       </tr>
       <tr>
         <td><strong>Local Market Fit</strong></td>
         <td>15%</td>
-        <td>0–100 score measuring explicit or implicit geographic relevance to the business's service area and municipality.</td>
+        <td>0â€“100 score measuring explicit or implicit geographic relevance to the business's service area and municipality.</td>
       </tr>
       <tr>
         <td><strong>Content Gap Advantage</strong></td>
@@ -761,8 +761,8 @@ Opportunity Score = (0.30 &times; Relevance) + (0.25 &times; Commercial Intent) 
   <!-- ==================== SECTION 5: ALL 10 MILESTONES ==================== -->
   <div class="header-bar">
     <div>
-      <div class="header-title">SERP-SCOUT — PLATFORM ARCHITECTURE & MILESTONES GUIDE</div>
-      <div class="header-tagline">5. Comprehensive Milestones Breakdown (0–9)</div>
+      <div class="header-title">SERP-SCOUT â€” PLATFORM ARCHITECTURE & MILESTONES GUIDE</div>
+      <div class="header-tagline">5. Comprehensive Milestones Breakdown (0â€“9)</div>
     </div>
     <div class="header-meta">Section 5 &bull; Implementation Journey</div>
   </div>
@@ -822,10 +822,10 @@ Opportunity Score = (0.30 &times; Relevance) + (0.25 &times; Commercial Intent) 
 
   <div class="header-bar">
     <div>
-      <div class="header-title">SERP-SCOUT — PLATFORM ARCHITECTURE & MILESTONES GUIDE</div>
+      <div class="header-title">SERP-SCOUT â€” PLATFORM ARCHITECTURE & MILESTONES GUIDE</div>
       <div class="header-tagline">5. Comprehensive Milestones Breakdown (Cont.)</div>
     </div>
-    <div class="header-meta">Section 5 &bull; Milestones 5–9</div>
+    <div class="header-meta">Section 5 &bull; Milestones 5â€“9</div>
   </div>
 
   <!-- Milestone 5 -->
@@ -851,7 +851,7 @@ Opportunity Score = (0.30 &times; Relevance) + (0.25 &times; Commercial Intent) 
     <div class="milestone-header">
       <div class="milestone-title">Milestone 7: Prioritized Action Engine &amp; Dynamic PDF Generation</div>
     </div>
-    <p><strong>Deliverables:</strong> Action recommendation engine synthesizing agent outputs into 3 to 5 prioritized actions (P0–P3) with business impact, effort, and due dates. Headless Puppeteer engine rendering publication-grade PDF reports with evidence appendices.</p>
+    <p><strong>Deliverables:</strong> Action recommendation engine synthesizing agent outputs into 3 to 5 prioritized actions (P0â€“P3) with business impact, effort, and due dates. Headless Puppeteer engine rendering publication-grade PDF reports with evidence appendices.</p>
     <p><strong>Implementation:</strong> Report generated with exactly 4 high-impact actions. Puppeteer generated valid PDF (136 KB, %PDF header) with full CSS styling and citation backlinks.</p>
   </div>
 
@@ -878,7 +878,7 @@ Opportunity Score = (0.30 &times; Relevance) + (0.25 &times; Commercial Intent) 
   <!-- ==================== SECTION 6: SECURITY & PRODUCTION READINESS ==================== -->
   <div class="header-bar">
     <div>
-      <div class="header-title">SERP-SCOUT — PLATFORM ARCHITECTURE & MILESTONES GUIDE</div>
+      <div class="header-title">SERP-SCOUT â€” PLATFORM ARCHITECTURE & MILESTONES GUIDE</div>
       <div class="header-tagline">6. Security, Isolation & Production Operations</div>
     </div>
     <div class="header-meta">Section 6 &bull; Operational Rigor</div>
@@ -963,7 +963,7 @@ Opportunity Score = (0.30 &times; Relevance) + (0.25 &times; Commercial Intent) 
       </tr>
       <tr>
         <td><span class="code-pill">pnpm --filter api exec tsx src/test-milestone7.ts</span></td>
-        <td>Action recommendation engine (3–5 actions max), PDF report rendering, citation backlink validation.</td>
+        <td>Action recommendation engine (3â€“5 actions max), PDF report rendering, citation backlink validation.</td>
       </tr>
       <tr>
         <td><span class="code-pill">pnpm --filter api exec tsx src/test-milestone5.ts</span></td>
@@ -978,7 +978,7 @@ Opportunity Score = (0.30 &times; Relevance) + (0.25 &times; Commercial Intent) 
 
   <br>
   <div class="alert-box alert-success" style="text-align: center; padding: 14px;">
-    <strong>🎉 SERP-SCOUT PLATFORM VERIFICATION COMPLETE 🎉</strong><br>
+    <strong>ðŸŽ‰ SERP-SCOUT PLATFORM VERIFICATION COMPLETE ðŸŽ‰</strong><br>
     All 10 Milestones (0 through 9) have been designed, coded, rigorously tested, and confirmed production-ready.
   </div>
 
@@ -987,12 +987,12 @@ Opportunity Score = (0.30 &times; Relevance) + (0.25 &times; Commercial Intent) 
 }
 
 async function main() {
-  console.log('📄 Starting Serp-Scout Platform Architecture & Milestones PDF generation...');
+  console.log('ðŸ“„ Starting Serp-Scout Platform Architecture & Milestones PDF generation...');
 
   const html = generatePlatformPdfHtml();
   const executablePath = findChromiumExecutable();
 
-  console.log(`🔍 Chromium Executable: ${executablePath || 'Using default puppeteer bundle'}`);
+  console.log(`ðŸ” Chromium Executable: ${executablePath || 'Using default puppeteer bundle'}`);
 
   const browser = await puppeteer.launch({
     executablePath,
@@ -1028,12 +1028,12 @@ async function main() {
   fs.writeFileSync(docsPdfPath, pdfBuffer);
 
   const stats = fs.statSync(rootPdfPath);
-  console.log(`✅ Successfully generated Platform Architecture & Milestones PDF!`);
-  console.log(`📍 File 1: ${rootPdfPath} (${(stats.size / 1024).toFixed(1)} KB)`);
-  console.log(`📍 File 2: ${docsPdfPath} (${(stats.size / 1024).toFixed(1)} KB)`);
+  console.log(`âœ… Successfully generated Platform Architecture & Milestones PDF!`);
+  console.log(`ðŸ“ File 1: ${rootPdfPath} (${(stats.size / 1024).toFixed(1)} KB)`);
+  console.log(`ðŸ“ File 2: ${docsPdfPath} (${(stats.size / 1024).toFixed(1)} KB)`);
 }
 
 main().catch((err) => {
-  console.error('❌ Failed to generate Platform PDF:', err);
+  console.error('âŒ Failed to generate Platform PDF:', err);
   process.exit(1);
 });

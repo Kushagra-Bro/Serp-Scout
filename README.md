@@ -17,7 +17,7 @@
   <img src="https://img.shields.io/badge/TypeScript-3178C6?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript">
   <img src="https://img.shields.io/badge/Express-000000?style=for-the-badge&logo=express&logoColor=white" alt="Express">
   <img src="https://img.shields.io/badge/LangGraph-1C3C3C?style=for-the-badge&logo=langchain&logoColor=white" alt="LangGraph">
-  <img src="https://img.shields.io/badge/Groq%20LLaMA%203-F05A24?style=for-the-badge&logo=fastapi&logoColor=white" alt="Groq LLaMA 3">
+  <img src="https://img.shields.io/badge/Groq%20LLM-F05A24?style=for-the-badge&logo=fastapi&logoColor=white" alt="Groq LLM">
   <img src="https://img.shields.io/badge/SerpApi-4285F4?style=for-the-badge&logo=google&logoColor=white" alt="SerpApi">
   <img src="https://img.shields.io/badge/Neon%20Postgres-00E599?style=for-the-badge&logo=postgresql&logoColor=black" alt="Neon Postgres">
   <img src="https://img.shields.io/badge/Drizzle%20ORM-C5F74F?style=for-the-badge&logo=drizzle&logoColor=black" alt="Drizzle ORM">
@@ -65,17 +65,17 @@ Small business owners don't need vanity SEO metrics (Domain Authority, Page Auth
 
 ## 🚀 Key Features
 
-* **Autonomous Website Extraction & Enrichment**: Scrapes business homepages, parses metadata, headings, detected services, and schema markup, then uses Groq LLaMA 3 to extract structured business profiles.
+* **Autonomous Website Extraction & Enrichment**: Scrapes business homepages, parses metadata, headings, detected services, and schema markup, then uses Groq-hosted LLMs to extract structured business profiles.
 * **SerpApi + Tavily Hybrid Search Layer**: Normalizes Google Organic, Google Maps (Local 3-Pack), People Also Ask (PAA), Related Searches, and Google News results with token-conserving multi-query sweep fallbacks.
 * **Location Autocomplete & Canonical Disambiguation**: Resolves city, postal code, and clinic queries into verified geographical search parameters via SerpApi's `locations.json` registry.
 * **Google Business Profile (GBP) 4-Point Live Audit Protocol**: Live audit engine evaluating Google 3-Pack placement, Canonical NAP & Domain Linkage, Voice of Customer review velocity, and Territory Radius Targeting with 12 interactive checklist tasks and progress tracking.
 * **Competitor Discovery & Threat Matrix**: Automatically discovers local business rivals without requiring the owner to know competitor names in advance. Classifies domains as `direct_competitor`, `indirect_competitor`, or `directory_aggregator` with human-in-the-loop review.
 * **Opportunity Radar & Keyword Ranking Deltas**: Discovers high-conversion keywords, scores them using a multi-factor formula (Business Relevance, Commercial Intent, Ranking Potential, Local Market Fit, Content Gap), and calculates historical rank deltas ($\Delta \text{rank}$).
-* **Action-Oriented Recommendation Engine**: Groq LLaMA 3 synthesizes all competitive evidence into 3 to 5 prioritized actions (P0 to P3). Each recommendation includes 3–4 practical sub-task check-off steps with real-time percentage progress bars.
+* **Action-Oriented Recommendation Engine**: Groq-hosted LLMs synthesize all competitive evidence into 3 to 5 prioritized actions (P0 to P3). Each recommendation includes 3–4 practical sub-task check-off steps with real-time percentage progress bars.
 * **Tangible Outcome & Win Tracker**: Correlates completed recommendations with subsequent SERP rank sweeps to compute exact position improvements (e.g. `Climbed +4 spots for "dentist near me"`).
 * **Client & White-Label Web Sharing**: Generates tokenized, read-only public links (`/shared/[token]`) for external stakeholders with dual-view mode toggles (Executive vs Specialist view) and PDF print styling.
 * **Triggered Emergency Market Shift Alerts**: Out-of-cycle flash alerts detecting Google 3-Pack displacement, sharp rank drops ($\ge 3$ spots), competitor sponsored Google Ads campaigns, and negative review spikes, paired with transactional email alerts.
-* **Automated Scheduling & Notifications**: BullMQ repeat queues running on Upstash Redis TLS dispatch daily, weekly, or monthly scheduled runs, perform background stale data checks, and deliver single-notification transactional emails via Resend.
+* **Automated Scheduling & Notifications**: BullMQ repeat queues running on Upstash Redis TLS dispatch daily, weekly, or monthly scheduled runs, perform background stale data checks, and deliver single-notification transactional emails via Resend. Because repeat jobs only execute while a worker process is running, a **catch-up reconciliation** pass (`src/jobs/catchup.ts`) runs on boot and every 6 hours: it compares `lastAnalyzedAt` against each workspace's cadence in Postgres and enqueues whatever is overdue, so occurrences missed by downtime or a Redis flush are repaired instead of silently skipped.
 * **Enterprise Multi-Tenant Security**: Zero cross-workspace data leakage, strict monthly search quotas (HTTP 429), and robust SSRF filtering preventing internal network probes.
 
 ---
@@ -104,7 +104,8 @@ flowchart TD
     end
 
     subgraph AI["AI & Search Tier"]
-        Groq["Groq LLaMA 3 Engine\n(Synthesis, Recommendations, Audits)"]
+        Groq["Groq LLM Engine\n(gpt-oss-120b default, configurable)"]
+        LangGraph["LangGraph Research Graph\n(11 nodes, parallel fan-out)"]
         SerpApi["SerpApi Engine\n(Google Organic, Maps, News, Locations)"]
         Tavily["Tavily Search Engine\n(Parallel Sweep Backfill)"]
     end
@@ -126,6 +127,30 @@ flowchart TD
     Express --> ResendService
 ```
 
+### Research Pipeline (`@serp-scout/agents`)
+The platform's intelligence pipeline is a real LangGraph `StateGraph` that fans
+out to the analysis agents in parallel:
+
+```
+START → analyze_website → plan_queries → search_sweep
+     → discover_competitors → discover_keywords
+     → [content_gap | messaging | review | news_signals]   ← parallel fan-out
+     → recommendation_engine → report_generator → END
+```
+
+* Every SERP query is injected via a `ResearchSearchGateway`; `apps/api`
+  supplies the SerpApi-backed implementation, which records each query as a
+  `search_runs` row and increments the workspace quota.
+* Nodes **never throw**: a failed node appends to the `errors` channel (append
+  reducer) and the run continues, so a partial pass still yields a usable
+  report when an upstream API is down or out of quota.
+* The parallel fan-out is safe because every channel it writes to uses an
+  append reducer; the fan-in at `recommendation_engine` is a barrier LangGraph
+  resolves by waiting on all incoming edges.
+* Trigger with `POST /api/businesses/:id/analysis/run` (queued on BullMQ, or
+  `{"sync": true}` to run inline) and read the latest output from
+  `GET /api/businesses/:id/analysis/run/status`.
+
 ---
 
 ## 📦 Monorepo Structure
@@ -140,7 +165,8 @@ flowchart TD
     │   │   │   ├── jobs/              # BullMQ queue definitions, workers & schedulers
     │   │   │   ├── middleware/        # Clerk auth, workspace isolation, rate limiting
     │   │   │   ├── routes/            # REST API endpoints (businesses, reports, searches)
-    │   │   │   └── services/          # Market shift, PDF generation, notification services
+    │   │   │   └── services/          # Market shift, PDF, notifications, SerpApi research gateway
+    │   │   ├── scripts/               # Dev/verification scripts (excluded from prod build)
     │   │   └── package.json
     │   └── web/                       # Next.js 14 App Router web application
     │       ├── src/
@@ -152,6 +178,7 @@ flowchart TD
     ├── packages/
     │   ├── agents/                    # Multi-agent intelligence & recommendation pipelines
     │   │   ├── src/
+    │   │   │   ├── orchestrator/          # LangGraph state, research graph & pipeline runner
     │   │   │   ├── competitor-discovery/  # Extraction, profiler, threat matrix
     │   │   │   ├── opportunity-radar/     # Keyword scoring formula, intent mapping
     │   │   │   ├── recommendation-engine/ # Prioritized P0-P3 action generation with sub-tasks
@@ -179,13 +206,17 @@ flowchart TD
 | Module / File | Responsibility |
 | :--- | :--- |
 | `src/index.ts` | Server entrypoint, CORS, Clerk auth mounting, and public shared router registration. |
+| `src/routes/research-graph.ts` | LangGraph pipeline trigger (`POST .../analysis/run`) and latest-run status endpoint. |
 | `src/routes/reports.ts` | Report CRUD, sub-task checklist toggles, outcome metrics, and tokenized share links. |
 | `src/routes/businesses.ts` | Business management, location autocomplete (`/locations/search`), and service profiles. |
 | `src/routes/search-runs.ts` | Multi-engine search trigger (Google, Maps, News) with quota and cost tracking. |
 | `src/services/market-shift.service.ts` | Live detection for 3-Pack displacement, rank drops, competitor ads, and review spikes. |
+| `src/services/research-gateway.service.ts` | SerpApi-backed `ResearchSearchGateway` for the graph; records runs & applies quota. |
 | `src/services/pdf.service.ts` | Headless Chromium Puppeteer engine rendering pixel-perfect executive PDF briefings. |
 | `src/services/notification.service.ts` | Resend transactional email service with weekly briefs and emergency market alerts. |
-| `src/jobs/workers/` | BullMQ background workers (`research.worker.ts`, `report.worker.ts`, `stale-check.worker.ts`). |
+| `src/jobs/workers/` | BullMQ background workers (`research.worker.ts`, `report.worker.ts`, `stale-check.worker.ts`, `research-graph.worker.ts`). |
+| `src/jobs/catchup.ts` | Cadence reconciliation: enqueues a refresh for any business whose `lastAnalyzedAt` is older than its `refreshCadence` (runs on boot + every 6h). |
+| `scripts/` | Dev verification scripts (`test-milestone*.ts`, `generate-milestones-pdf.ts`); excluded from the prod build via tsconfig. |
 
 </blockquote>
 </details>
@@ -202,6 +233,7 @@ flowchart TD
 | `src/app/(app)/competitors/page.tsx` | Competitor discovery directory with threat matrix and human-in-the-loop review. |
 | `src/app/(app)/keywords/page.tsx` | Keyword Opportunity Radar with multi-factor scoring and ranking trajectory tracking. |
 | `src/app/(app)/onboarding/page.tsx` | Instant onboarding flow with website extraction and location autocomplete. |
+| `src/components/` | Shared UI (ErrorBanner) plus extracted page sections (`content/`, `local/`). |
 | `src/middleware.ts` | Clerk security middleware with protected application routes and public share access. |
 
 </blockquote>
@@ -213,7 +245,7 @@ flowchart TD
 
 | Package | Responsibility |
 | :--- | :--- |
-| `@serp-scout/agents` | Groq LLaMA 3 multi-agent system (Competitor Discovery, Content Gaps, Recommendations). |
+| `@serp-scout/agents` | LangGraph-orchestrated multi-agent system (Competitor Discovery, Content Gaps, Recommendations, Research Graph). |
 | `@serp-scout/db` | Neon Serverless PostgreSQL client with 18 Drizzle ORM relational tables. |
 | `@serp-scout/serpapi` | Normalization layer for SerpApi (Web, Maps, News, Locations) and Tavily search backfills. |
 | `@serp-scout/types` | Centralized TypeScript contracts for search, agents, recommendations, and reports. |
@@ -227,14 +259,20 @@ flowchart TD
 
 | Agent Name | Engine | Responsibility |
 | :--- | :--- | :--- |
-| **Website Extractor** | `Cheerio` + `Groq LLaMA 3` | Ingests business URL, strips boilerplates, detects core services, and extracts structured schema. |
+| **Research Orchestrator** | `LangGraph StateGraph` | Compiles website analysis, SERP sweep, competitor/keyword discovery and the parallel analysis fan-out into one resilient run with error accumulation. |
+| **Website Extractor** | `Cheerio` + `Groq (gpt-oss-120b)` | Ingests business URL, strips boilerplates, detects core services, and extracts structured schema. |
 | **Competitor Discovery Agent** | `SerpApi` + `Heuristic Scorer` | Discovers organic and local 3-Pack rivals, scores overlap, and filters non-competitor directories. |
-| **Content Gap Agent** | `Groq LLaMA 3` | Discovers missing commercial and transactional topics where competitors capture high-intent searches. |
-| **Messaging & Positioning Agent** | `Groq LLaMA 3` | Analyzes competitor value propositions, guarantees, pricing cues, and call-to-actions. |
-| **Review & Voice of Customer Agent** | `Groq LLaMA 3` | Evaluates sentiment patterns, customer friction points, and recurring complaints for copy angles. |
+| **Content Gap Agent** | `Groq (gpt-oss-120b)` | Discovers missing commercial and transactional topics where competitors capture high-intent searches. |
+| **Messaging & Positioning Agent** | `Groq (gpt-oss-120b)` | Analyzes competitor value propositions, guarantees, pricing cues, and call-to-actions. |
+| **Review & Voice of Customer Agent** | `Groq (gpt-oss-120b)` | Evaluates sentiment patterns, customer friction points, and recurring complaints for copy angles. |
 | **GBP Live Audit Protocol** | `Rule Engine` + `SerpApi` | Audits 3-Pack rank, domain linkage, review velocity, and hyper-local geographical radius targeting. |
-| **Recommendation Engine** | `Groq LLaMA 3` | Synthesizes all intelligence into 3–5 high-ROI actions with step-by-step implementation sub-tasks. |
+| **Recommendation Engine** | `Groq (gpt-oss-120b)` | Synthesizes all intelligence into 3–5 high-ROI actions with step-by-step implementation sub-tasks. |
 | **Market Shift Engine** | `Heuristic Classifier` | Detects emergency market shifts (3-Pack displacement, competitor ad campaigns, review surges). |
+
+> The Groq inference model is configurable via `GROQ_MODEL` (default
+> `openai/gpt-oss-120b`). When an LLM call fails, agents fall back to
+> deterministic heuristics so the pipeline still produces evidence-grounded
+> output.
 
 ---
 
@@ -248,7 +286,7 @@ flowchart TD
 - **API Credentials**:
   - [Clerk](https://clerk.com) (Authentication & user management)
   - [Neon](https://neon.tech) (Serverless PostgreSQL)
-  - [Groq](https://groq.com) (High-speed LLaMA 3 inference)
+  - [Groq](https://groq.com) (High-speed LLM inference)
   - [SerpApi](https://serpapi.com) (Search engine results & Google Maps)
   - [Tavily](https://tavily.com) (Fast multi-query web sweep search)
   - [Resend](https://resend.com) (Transactional email notifications)
@@ -344,5 +382,3 @@ pnpm run typecheck
 ## 📄 License
 
 Distributed under the **MIT License**. See [`LICENSE`](./LICENSE) for more information.
-
-<p align="right"><a href="#top">⬆ Back to Top</a></p>

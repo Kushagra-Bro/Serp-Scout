@@ -6,7 +6,7 @@ import {
   notifications,
   keywords,
   rankingObservations,
-} from './db/index.js';
+} from '../src/db/index.js';
 import { eq, and } from 'drizzle-orm';
 import {
   researchQueue,
@@ -15,7 +15,7 @@ import {
   websiteAnalysisQueue,
   getRecentJobs,
   redisConnection,
-} from './jobs/queues.js';
+} from '../src/jobs/queues.js';
 import { Worker } from 'bullmq';
 import {
   scheduleWorkspaceResearch,
@@ -23,14 +23,14 @@ import {
   scheduleStaleCheck,
   triggerImmediateRefresh,
   CADENCE_CRON_PATTERNS,
-} from './jobs/scheduler.js';
-import { executeStaleCheck } from './jobs/workers/stale-check.worker.js';
-import { executeReportGeneration } from './jobs/workers/report.worker.js';
-import { NotificationService } from './services/notification.service.js';
+} from '../src/jobs/scheduler.js';
+import { executeStaleCheck } from '../src/jobs/workers/stale-check.worker.js';
+import { executeReportGeneration } from '../src/jobs/workers/report.worker.js';
+import { NotificationService } from '../src/services/notification.service.js';
 import { GeneratedReport } from '@serp-scout/types';
 
 async function main() {
-  console.log('🧪 Starting Milestone 8: Scheduling, Notifications & History verification...\n');
+  console.log('ðŸ§ª Starting Milestone 8: Scheduling, Notifications & History verification...\n');
 
   // Find or create test workspace
   let [testWorkspace] = await db.select().from(workspaces).limit(1);
@@ -67,21 +67,21 @@ async function main() {
       .returning();
   }
 
-  console.log(`🏢 Test Workspace: ${testWorkspace.name} (${testWorkspace.id})`);
-  console.log(`📍 Test Business: ${testBiz.name} (${testBiz.id})\n`);
+  console.log(`ðŸ¢ Test Workspace: ${testWorkspace.name} (${testWorkspace.id})`);
+  console.log(`ðŸ“ Test Business: ${testBiz.name} (${testBiz.id})\n`);
 
-  // ── 1. BullMQ Queues Connectivity Check ─────────────────────────────────────
-  console.log('1️⃣ Checking BullMQ queue initialization & Redis TLS connectivity...');
+  // â”€â”€ 1. BullMQ Queues Connectivity Check â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  console.log('1ï¸âƒ£ Checking BullMQ queue initialization & Redis TLS connectivity...');
   await Promise.all([
     websiteAnalysisQueue.waitUntilReady(),
     researchQueue.waitUntilReady(),
     reportQueue.waitUntilReady(),
     staleQueue.waitUntilReady(),
   ]);
-  console.log('✅ All 4 BullMQ queues (website-analysis, research-run, weekly-report, stale-check) ready on Upstash TLS!\n');
+  console.log('âœ… All 4 BullMQ queues (website-analysis, research-run, weekly-report, stale-check) ready on Upstash TLS!\n');
 
-  // ── 2. Refresh Schedule Configuration & Repeatable BullMQ Jobs ─────────────
-  console.log('2️⃣ Testing refresh schedule configuration (Daily / Weekly / Monthly / Manual)...');
+  // â”€â”€ 2. Refresh Schedule Configuration & Repeatable BullMQ Jobs â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  console.log('2ï¸âƒ£ Testing refresh schedule configuration (Daily / Weekly / Monthly / Manual)...');
   
   // Test Weekly
   const weeklySched = await scheduleWorkspaceResearch({
@@ -89,7 +89,7 @@ async function main() {
     cadence: 'weekly',
     businessId: testBiz.id,
   });
-  console.log(`✅ Weekly repeatable schedule registered with pattern: ${weeklySched.pattern}`);
+  console.log(`âœ… Weekly repeatable schedule registered with pattern: ${weeklySched.pattern}`);
   if (weeklySched.pattern !== CADENCE_CRON_PATTERNS.weekly) {
     throw new Error('Weekly cron pattern mismatch');
   }
@@ -100,7 +100,7 @@ async function main() {
     cadence: 'daily',
     businessId: testBiz.id,
   });
-  console.log(`✅ Daily repeatable schedule registered with pattern: ${dailySched.pattern}`);
+  console.log(`âœ… Daily repeatable schedule registered with pattern: ${dailySched.pattern}`);
   if (dailySched.pattern !== CADENCE_CRON_PATTERNS.daily) {
     throw new Error('Daily cron pattern mismatch');
   }
@@ -111,7 +111,7 @@ async function main() {
     cadence: 'monthly',
     businessId: testBiz.id,
   });
-  console.log(`✅ Monthly repeatable schedule registered with pattern: ${monthlySched.pattern}`);
+  console.log(`âœ… Monthly repeatable schedule registered with pattern: ${monthlySched.pattern}`);
 
   // Test Manual (clears repeatable job)
   const manualSched = await scheduleWorkspaceResearch({
@@ -119,10 +119,10 @@ async function main() {
     cadence: 'manual',
     businessId: testBiz.id,
   });
-  console.log(`✅ Manual refresh mode verified (repeatable job removed: ${!manualSched.scheduled})\n`);
+  console.log(`âœ… Manual refresh mode verified (repeatable job removed: ${!manualSched.scheduled})\n`);
 
-  // ── 3. Stale Data Indicator & Stale Check Worker ────────────────────────────
-  console.log('3️⃣ Testing Stale Data Indicator & Evaluation Worker...');
+  // â”€â”€ 3. Stale Data Indicator & Stale Check Worker â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  console.log('3ï¸âƒ£ Testing Stale Data Indicator & Evaluation Worker...');
   
   // A. Set business lastAnalyzedAt to 10 days ago (older than 7-day threshold)
   const tenDaysAgo = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000);
@@ -138,8 +138,8 @@ async function main() {
     .from(businesses)
     .where(eq(businesses.id, testBiz.id));
 
-  console.log(`🔍 Old data check: lastAnalyzedAt = ${tenDaysAgo.toISOString().slice(0, 10)}`);
-  console.log(`✅ StaleCheckWorker flagged business dataStale: ${updatedBiz1.dataStale} (Expected: true)`);
+  console.log(`ðŸ” Old data check: lastAnalyzedAt = ${tenDaysAgo.toISOString().slice(0, 10)}`);
+  console.log(`âœ… StaleCheckWorker flagged business dataStale: ${updatedBiz1.dataStale} (Expected: true)`);
   if (!updatedBiz1.dataStale) {
     throw new Error('Expected business to be marked as dataStale: true');
   }
@@ -157,27 +157,27 @@ async function main() {
     .from(businesses)
     .where(eq(businesses.id, testBiz.id));
 
-  console.log(`🔍 Fresh data check: lastAnalyzedAt = ${freshTime.toISOString().slice(0, 10)}`);
-  console.log(`✅ StaleCheckWorker flagged business dataStale: ${updatedBiz2.dataStale} (Expected: false)`);
+  console.log(`ðŸ” Fresh data check: lastAnalyzedAt = ${freshTime.toISOString().slice(0, 10)}`);
+  console.log(`âœ… StaleCheckWorker flagged business dataStale: ${updatedBiz2.dataStale} (Expected: false)`);
   if (updatedBiz2.dataStale) {
     throw new Error('Expected business to be marked as dataStale: false');
   }
-  console.log('✅ Stale Data Indicator logic verified!\n');
+  console.log('âœ… Stale Data Indicator logic verified!\n');
 
-  // ── 4. Automated Report Generation Worker & PDF Pipeline ────────────────────
-  console.log('4️⃣ Testing automated weekly report worker pipeline...');
+  // â”€â”€ 4. Automated Report Generation Worker & PDF Pipeline â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  console.log('4ï¸âƒ£ Testing automated weekly report worker pipeline...');
   const reportRun = await executeReportGeneration({
     businessId: testBiz.id,
     workspaceId: testWorkspace.id,
     recipientEmail: 'kushal@example.com',
   });
 
-  console.log(`✅ Generated Report ID: ${reportRun.reportId}`);
-  console.log(`✅ Prioritized Actions generated: ${reportRun.actionCount}`);
-  console.log(`✅ Notification status: ${reportRun.notification.success ? 'SENT' : 'LOGGED'} (ID: ${reportRun.notification.notificationId})\n`);
+  console.log(`âœ… Generated Report ID: ${reportRun.reportId}`);
+  console.log(`âœ… Prioritized Actions generated: ${reportRun.actionCount}`);
+  console.log(`âœ… Notification status: ${reportRun.notification.success ? 'SENT' : 'LOGGED'} (ID: ${reportRun.notification.notificationId})\n`);
 
-  // ── 5. Notification Deduplication (Exactly ONE notification per report) ─────
-  console.log('5️⃣ Testing Notification Deduplication Rule ("Users receive only one notification per completed report")...');
+  // â”€â”€ 5. Notification Deduplication (Exactly ONE notification per report) â”€â”€â”€â”€â”€
+  console.log('5ï¸âƒ£ Testing Notification Deduplication Rule ("Users receive only one notification per completed report")...');
   
   // Fetch report object
   const [savedReport] = await db
@@ -217,7 +217,7 @@ async function main() {
     report: mockGeneratedReport,
   });
 
-  console.log(`🔍 Duplicate notification attempt result: duplicate = ${dupCheck.duplicate}, success = ${dupCheck.success}`);
+  console.log(`ðŸ” Duplicate notification attempt result: duplicate = ${dupCheck.duplicate}, success = ${dupCheck.success}`);
   if (!dupCheck.duplicate) {
     throw new Error('Notification deduplication failed: duplicate notification was not blocked!');
   }
@@ -233,14 +233,14 @@ async function main() {
       )
     );
 
-  console.log(`✅ Exact notification count in DB for report ${reportRun.reportId}: ${notifCount.length} (Expected: 1)`);
+  console.log(`âœ… Exact notification count in DB for report ${reportRun.reportId}: ${notifCount.length} (Expected: 1)`);
   if (notifCount.length !== 1) {
     throw new Error(`Expected exactly 1 notification record in DB, found ${notifCount.length}`);
   }
-  console.log('✅ Single-notification deduplication verified!\n');
+  console.log('âœ… Single-notification deduplication verified!\n');
 
-  // ── 6. Visible Failed Jobs & Queue Diagnostics ──────────────────────────────
-  console.log('6️⃣ Testing Failed Jobs Visibility & Diagnostics (Acceptance Criteria: "Failed jobs are visible")...');
+  // â”€â”€ 6. Visible Failed Jobs & Queue Diagnostics â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  console.log('6ï¸âƒ£ Testing Failed Jobs Visibility & Diagnostics (Acceptance Criteria: "Failed jobs are visible")...');
   
   // Set up a short-lived worker to process and fail the test job
   const failingWorker = new Worker(
@@ -279,9 +279,9 @@ async function main() {
   const recentJobs = await getRecentJobs(testWorkspace.id);
   const foundFailedJob = recentJobs.find((j) => j.id === String(failJob.id));
 
-  console.log(`🔍 Found ${recentJobs.length} recent jobs across all queues for workspace.`);
+  console.log(`ðŸ” Found ${recentJobs.length} recent jobs across all queues for workspace.`);
   if (foundFailedJob) {
-    console.log(`✅ Failed job successfully detected in diagnostics:`);
+    console.log(`âœ… Failed job successfully detected in diagnostics:`);
     console.log(`   - ID: ${foundFailedJob.id}`);
     console.log(`   - Queue: ${foundFailedJob.queue}`);
     console.log(`   - State: ${foundFailedJob.state}`);
@@ -289,10 +289,10 @@ async function main() {
   } else {
     throw new Error('Failed job was not captured in getRecentJobs() output');
   }
-  console.log('✅ Failed jobs are visible with error details!\n');
+  console.log('âœ… Failed jobs are visible with error details!\n');
 
-  // ── 7. Historical Ranking Comparisons Check ─────────────────────────────────
-  console.log('7️⃣ Verifying Historical Ranking Comparisons & Delta retention...');
+  // â”€â”€ 7. Historical Ranking Comparisons Check â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  console.log('7ï¸âƒ£ Verifying Historical Ranking Comparisons & Delta retention...');
   // Check ranking observations exist and can compute deltas
   const sampleObservations = await db
     .select()
@@ -300,9 +300,9 @@ async function main() {
     .where(eq(rankingObservations.businessId, testBiz.id))
     .limit(5);
 
-  console.log(`✅ Historical ranking observations queryable: ${sampleObservations.length} records found in database.`);
+  console.log(`âœ… Historical ranking observations queryable: ${sampleObservations.length} records found in database.`);
 
-  console.log('\n🎉 ALL MILESTONE 8 VERIFICATION CHECKS PASSED SUCCESSFULLY! 🎉');
+  console.log('\nðŸŽ‰ ALL MILESTONE 8 VERIFICATION CHECKS PASSED SUCCESSFULLY! ðŸŽ‰');
 
   // Clean up connections
   await Promise.all([
@@ -316,7 +316,7 @@ async function main() {
 }
 
 main().catch(async (err) => {
-  console.error('\n❌ Milestone 8 verification failed:', err);
+  console.error('\nâŒ Milestone 8 verification failed:', err);
   await Promise.all([
     websiteAnalysisQueue.close(),
     researchQueue.close(),

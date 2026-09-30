@@ -9,16 +9,16 @@ import {
   reports,
   recommendations,
   sourceEvidence,
-} from './db/index.js';
+} from '../src/db/index.js';
 import { eq } from 'drizzle-orm';
-import { env } from './config/env.js';
+import { env } from '../src/config/env.js';
 import {
   generateReportPdf,
   generateReportCsv,
-} from './services/pdf.service.js';
+} from '../src/services/pdf.service.js';
 
 async function main() {
-  console.log('🧪 Starting Milestone 7: Recommendation & Reporting Engine verification...\n');
+  console.log('ðŸ§ª Starting Milestone 7: Recommendation & Reporting Engine verification...\n');
 
   const testBusiness = {
     name: 'Austin Premier Dentistry',
@@ -28,7 +28,7 @@ async function main() {
   };
 
   // 1. Test Recommendation Engine
-  console.log('1️⃣ Testing Recommendation Engine (max 3 to 5 actions with evidence citations)...');
+  console.log('1ï¸âƒ£ Testing Recommendation Engine (max 3 to 5 actions with evidence citations)...');
   const actionPlan = await generateRecommendations({
     business: testBusiness,
     rankingChanges: [
@@ -83,10 +83,10 @@ async function main() {
   if (actionPlan.length < 2 || actionPlan.length > 5) {
     throw new Error(`Action plan must contain between 2 and 5 actions, received: ${actionPlan.length}`);
   }
-  console.log('✅ Recommendation Engine verified.');
+  console.log('âœ… Recommendation Engine verified.');
 
   // 2. Test Full Report Generator
-  console.log('\n2️⃣ Testing Full Weekly Report Generator...');
+  console.log('\n2ï¸âƒ£ Testing Full Weekly Report Generator...');
   const periodStart = '2026-09-13';
   const periodEnd = '2026-09-20';
 
@@ -133,10 +133,10 @@ async function main() {
   if (!fullReport.executiveSummary.weeklyFocus || fullReport.actionPlan.length === 0) {
     throw new Error('Report generator failed to produce complete executive summary and actions');
   }
-  console.log('✅ Weekly Report Generator verified.');
+  console.log('âœ… Weekly Report Generator verified.');
 
   // 3. Test Database Persistence
-  console.log('\n3️⃣ Testing Database Persistence for Reports, Recommendations, and Evidence...');
+  console.log('\n3ï¸âƒ£ Testing Database Persistence for Reports, Recommendations, and Evidence...');
   const testUserId = 'test_rep_user_' + Math.random().toString(36).substring(2, 7);
 
   const [testWs] = await db
@@ -168,7 +168,7 @@ async function main() {
     })
     .returning();
 
-  console.log(`✅ Saved Report ID: ${savedReport.id} (Status: ${savedReport.status})`);
+  console.log(`âœ… Saved Report ID: ${savedReport.id} (Status: ${savedReport.status})`);
 
   // Insert Recommendations linked to Report
   const [savedRec] = await db
@@ -190,7 +190,7 @@ async function main() {
     })
     .returning();
 
-  console.log(`✅ Saved Recommendation ID: ${savedRec.id} (Priority: ${savedRec.priority})`);
+  console.log(`âœ… Saved Recommendation ID: ${savedRec.id} (Priority: ${savedRec.priority})`);
 
   // Insert Source Evidence row
   const [savedEv] = await db
@@ -204,7 +204,7 @@ async function main() {
     })
     .returning();
 
-  console.log(`✅ Saved Source Evidence ID: ${savedEv.id} for Recommendation`);
+  console.log(`âœ… Saved Source Evidence ID: ${savedEv.id} for Recommendation`);
 
   // Test Recommendation Status Update
   const [updatedRec] = await db
@@ -216,10 +216,10 @@ async function main() {
   if (updatedRec.status !== 'in_progress') {
     throw new Error('Failed to update recommendation status');
   }
-  console.log('✅ Updated recommendation status to "in_progress".');
+  console.log('âœ… Updated recommendation status to "in_progress".');
 
   // 4. Test PDF Generation (Puppeteer)
-  console.log('\n4️⃣ Testing Puppeteer PDF Rendering...');
+  console.log('\n4ï¸âƒ£ Testing Puppeteer PDF Rendering...');
   const pdfBuffer = await generateReportPdf({
     businessName: testBusiness.name,
     websiteUrl: testBusiness.websiteUrl,
@@ -228,15 +228,15 @@ async function main() {
     report: fullReport,
   });
 
-  console.log(`✅ Generated PDF Buffer of size: ${pdfBuffer.length} bytes.`);
+  console.log(`âœ… Generated PDF Buffer of size: ${pdfBuffer.length} bytes.`);
   const pdfHeader = pdfBuffer.subarray(0, 4).toString('utf-8');
   if (pdfHeader !== '%PDF') {
     throw new Error(`Generated buffer is not a valid PDF (Header: "${pdfHeader}")`);
   }
-  console.log('✅ Verified PDF format integrity (%PDF header).');
+  console.log('âœ… Verified PDF format integrity (%PDF header).');
 
   // 5. Test CSV Generation
-  console.log('\n5️⃣ Testing CSV Export Formatting...');
+  console.log('\n5ï¸âƒ£ Testing CSV Export Formatting...');
   const csvText = generateReportCsv({
     businessName: testBusiness.name,
     websiteUrl: testBusiness.websiteUrl,
@@ -246,23 +246,23 @@ async function main() {
   });
 
   const lines = csvText.trim().split('\n');
-  console.log(`✅ Generated CSV with ${lines.length} lines.`);
+  console.log(`âœ… Generated CSV with ${lines.length} lines.`);
   console.log(`   Header: ${lines[0].substring(0, 60)}...`);
   console.log(`   Sample Row: ${lines[1].substring(0, 60)}...`);
 
   if (!lines[0].includes('Priority') || !lines[0].includes('Action Title')) {
     throw new Error('CSV missing required header columns');
   }
-  console.log('✅ CSV Export verified.');
+  console.log('âœ… CSV Export verified.');
 
   // Cleanup test workspace
   await db.delete(workspaces).where(eq(workspaces.id, testWs.id));
-  console.log('✅ Cleaned up test database resources.');
+  console.log('âœ… Cleaned up test database resources.');
 
-  console.log('\n🎉 ALL MILESTONE 7 VERIFICATION CHECKS PASSED SUCCESSFULLY! 🎉');
+  console.log('\nðŸŽ‰ ALL MILESTONE 7 VERIFICATION CHECKS PASSED SUCCESSFULLY! ðŸŽ‰');
 }
 
 main().catch((err) => {
-  console.error('\n❌ Milestone 7 verification failed:', err);
+  console.error('\nâŒ Milestone 7 verification failed:', err);
   process.exit(1);
 });

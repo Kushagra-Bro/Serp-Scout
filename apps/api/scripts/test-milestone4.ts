@@ -6,15 +6,15 @@ import {
   discoverCompetitors,
   RawSearchItemWithContext,
 } from '@serp-scout/agents';
-import { db, workspaces, businesses, services, competitors } from './db/index.js';
+import { db, workspaces, businesses, services, competitors } from '../src/db/index.js';
 import { eq, and } from 'drizzle-orm';
-import { env } from './config/env.js';
+import { env } from '../src/config/env.js';
 
 async function main() {
-  console.log('🧪 Starting Milestone 4: Competitor Discovery verification...\n');
+  console.log('ðŸ§ª Starting Milestone 4: Competitor Discovery verification...\n');
 
   // 1. Test Query Planner
-  console.log('1️⃣ Testing Query Planner (5 query groups)...');
+  console.log('1ï¸âƒ£ Testing Query Planner (5 query groups)...');
   const planned = planCompetitorQueries({
     businessName: 'Apex Family Dental',
     category: 'Dental Clinic',
@@ -37,10 +37,10 @@ async function main() {
   ) {
     throw new Error('Query planner failed to generate all 5 query groups');
   }
-  console.log('✅ Query Planner generates all 5 query categories correctly.');
+  console.log('âœ… Query Planner generates all 5 query categories correctly.');
 
   // 2. Test Candidate Extractor & Deduplication
-  console.log('\n2️⃣ Testing Candidate Extractor & Deduplication...');
+  console.log('\n2ï¸âƒ£ Testing Candidate Extractor & Deduplication...');
   const sampleSearchItems: RawSearchItemWithContext[] = [
     {
       query: 'dentist in Austin TX',
@@ -127,10 +127,10 @@ async function main() {
   if (self) {
     throw new Error('Failed to exclude the business itself from candidates');
   }
-  console.log('✅ Candidate extraction & deduplication working properly.');
+  console.log('âœ… Candidate extraction & deduplication working properly.');
 
   // 3. Test Groq Classification & Scorer
-  console.log('\n3️⃣ Testing Competitor Classification & Scoring...');
+  console.log('\n3ï¸âƒ£ Testing Competitor Classification & Scoring...');
   const directScore = computeCompetitorConfidenceScore(austinDental, 'direct', {
     services: ['Teeth Whitening', 'Dental Implants', 'Invisalign'],
     city: 'Austin',
@@ -164,7 +164,7 @@ async function main() {
   console.log(`   Classifier Result: ${classifiedDirect.competitorType} (Reason: ${classifiedDirect.reasoning})`);
 
   // 4. Test Complete Discovery Pipeline
-  console.log('\n4️⃣ Testing Complete Discovery Pipeline...');
+  console.log('\n4ï¸âƒ£ Testing Complete Discovery Pipeline...');
   const discovered = await discoverCompetitors({
     business: {
       name: 'Apex Family Dental',
@@ -186,10 +186,10 @@ async function main() {
   if (discovered.length === 0 || discovered[0].confidenceScore < discovered[discovered.length - 1].confidenceScore) {
     throw new Error('Competitor ranking by confidence score is invalid');
   }
-  console.log('✅ Competitor discovery pipeline working and sorted by confidence.');
+  console.log('âœ… Competitor discovery pipeline working and sorted by confidence.');
 
   // 5. Database Persistence & CRUD Verification
-  console.log('\n5️⃣ Testing Competitor DB CRUD & Workspace Isolation...');
+  console.log('\n5ï¸âƒ£ Testing Competitor DB CRUD & Workspace Isolation...');
   const testUserId = 'test_comp_user_' + Math.random().toString(36).substring(2, 7);
 
   const [testWs] = await db
@@ -236,7 +236,7 @@ async function main() {
     })
     .returning();
 
-  console.log(`✅ Inserted competitor candidate "${createdComp.name}" (ID: ${createdComp.id})`);
+  console.log(`âœ… Inserted competitor candidate "${createdComp.name}" (ID: ${createdComp.id})`);
 
   // Update status to 'confirmed'
   const [confirmedComp] = await db
@@ -252,16 +252,16 @@ async function main() {
   if (confirmedComp.status !== 'confirmed') {
     throw new Error('Failed to update competitor status');
   }
-  console.log(`✅ Updated competitor status to "confirmed" with user notes.`);
+  console.log(`âœ… Updated competitor status to "confirmed" with user notes.`);
 
   // Cleanup test workspace and its cascade
   await db.delete(workspaces).where(eq(workspaces.id, testWs.id));
-  console.log('✅ Cleaned up test database resources.');
+  console.log('âœ… Cleaned up test database resources.');
 
-  console.log('\n🎉 ALL MILESTONE 4 VERIFICATION CHECKS PASSED SUCCESSFULLY! 🎉');
+  console.log('\nðŸŽ‰ ALL MILESTONE 4 VERIFICATION CHECKS PASSED SUCCESSFULLY! ðŸŽ‰');
 }
 
 main().catch((err) => {
-  console.error('\n❌ Milestone 4 verification failed:', err);
+  console.error('\nâŒ Milestone 4 verification failed:', err);
   process.exit(1);
 });
