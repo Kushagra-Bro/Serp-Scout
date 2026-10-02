@@ -34,15 +34,7 @@ app.use(
 );
 app.use(express.json());
 
-// Apply Clerk middleware globally to parse authorization tokens
-app.use(
-  clerkMiddleware({
-    publishableKey: env.CLERK_PUBLISHABLE_KEY,
-    secretKey: env.CLERK_SECRET_KEY,
-  })
-);
-
-// Public health check
+// Public health check (placed before Clerk middleware so it never triggers dev-browser redirects)
 app.get('/health', (_req, res) => {
   res.json({
     status: 'ok',
@@ -51,6 +43,14 @@ app.get('/health', (_req, res) => {
     timestamp: new Date().toISOString(),
   });
 });
+
+// Apply Clerk middleware globally to parse authorization tokens
+app.use(
+  clerkMiddleware({
+    publishableKey: env.CLERK_PUBLISHABLE_KEY,
+    secretKey: env.CLERK_SECRET_KEY,
+  })
+);
 
 // Public Shared Reports Route (Token-authenticated for clients/stakeholders)
 app.use('/api/shared', sharedReportsRouter);
