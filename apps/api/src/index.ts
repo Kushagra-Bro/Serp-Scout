@@ -23,6 +23,8 @@ import { startStaleCheckWorker } from './jobs/workers/stale-check.worker.js';
 import { startResearchGraphWorker } from './jobs/workers/research-graph.worker.js';
 import { syncAllWorkspaceSchedules } from './jobs/scheduler.js';
 import { runCatchUpReconciliation } from './jobs/catchup.js';
+import { allQueues, redisConnection } from './jobs/queues.js';
+import { createGracefulShutdown } from './graceful-shutdown.js';
 
 const app = express();
 
@@ -94,12 +96,15 @@ app.use('/api/searches', requireAuthenticatedUser, requireWorkspace, searchRunsR
 app.use('/api/jobs', requireAuthenticatedUser, jobsRouter);
 
 // Start BullMQ Workers in non-test environments
+const workers: Array<{ close(): Promise<unknown> }> = [];
 if (env.NODE_ENV !== 'test') {
-  startWebsiteAnalysisWorker();
-  startResearchWorker();
-  startReportWorker();
-  startStaleCheckWorker();
-  startResearchGraphWorker();
+  workers.push(
+    startWebsiteAnalysisWorker(),
+    startResearchWorker(),
+    startReportWorker(),
+    startStaleCheckWorker(),
+    startResearchGraphWorker()
+  );
   // Register the repeat jobs first, then reconcile against the database so any
   // occurrence missed while the process was down gets enqueued. Sequencing this
   // matters: the catch-up's pending-job scan must see the freshly registered
@@ -138,8 +143,34 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
   });
 });
 
-app.listen(env.PORT, () => {
+const server = app.listen(env.PORT, () => {
   console.log(`🚀 Serp-Scout API listening on http://localhost:${env.PORT}`);
 });
+
+const shutdown = createGracefulShutdown({
+  closeHttpServer: () =>
+    new Promise<void>((resolve, reject) => {
+      server.close((error) => {
+        if (error) {
+          reject(error);
+        } else {
+          resolve();
+        }
+      });
+    }),
+  workers,
+  queues: allQueues,
+  closeRedis: () => redisConnection.quit(),
+});
+
+function handleShutdown(signal: 'SIGTERM' | 'SIGINT') {
+  void shutdown(signal).catch((error) => {
+    console.error('[Shutdown] Graceful shutdown failed after ' + signal + ':', error);
+    process.exitCode = 1;
+  });
+}
+
+process.once('SIGTERM', () => handleShutdown('SIGTERM'));
+process.once('SIGINT', () => handleShutdown('SIGINT'));
 
 export default app;
