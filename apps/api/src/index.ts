@@ -1,9 +1,9 @@
 import express from 'express';
 import cors from 'cors';
-import { clerkMiddleware } from '@clerk/express';
 import { env } from './config/env.js';
 import { requireAuthenticatedUser } from './middleware/auth.js';
 import { requireWorkspace } from './middleware/workspace.js';
+import authRouter from './routes/auth.js';
 import workspacesRouter from './routes/workspaces.js';
 import businessesRouter from './routes/businesses.js';
 import jobsRouter from './routes/jobs.js';
@@ -36,7 +36,7 @@ app.use(
 );
 app.use(express.json());
 
-// Public health check (placed before Clerk middleware so it never triggers dev-browser redirects)
+// Public health check
 app.get('/health', (_req, res) => {
   res.json({
     status: 'ok',
@@ -46,13 +46,8 @@ app.get('/health', (_req, res) => {
   });
 });
 
-// Apply Clerk middleware globally to parse authorization tokens
-app.use(
-  clerkMiddleware({
-    publishableKey: env.CLERK_PUBLISHABLE_KEY,
-    secretKey: env.CLERK_SECRET_KEY,
-  })
-);
+// Native Authentication (Sign-up, Sign-in, User session)
+app.use('/api/auth', authRouter);
 
 // Public Shared Reports Route (Token-authenticated for clients/stakeholders)
 app.use('/api/shared', sharedReportsRouter);

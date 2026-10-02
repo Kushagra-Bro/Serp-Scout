@@ -44,16 +44,15 @@ router.get('/', async (req: WorkspaceRequest, res: Response): Promise<void> => {
       return;
     }
 
-    const [primaryBiz] = await db
+    const allBusinesses = await db
       .select()
       .from(businesses)
-      .where(eq(businesses.workspaceId, workspaceId))
-      .limit(1);
+      .where(eq(businesses.workspaceId, workspaceId));
 
     // Check next scheduled run from BullMQ
     const repeatableJobs = await researchQueue.getRepeatableJobs();
     const wsRepeatable = repeatableJobs.find(
-      (j) => j.id?.includes(workspaceId) || j.key.includes(workspaceId)
+      (j) => j.key?.split(':').includes(workspaceId) || j.id === `repeat-${workspaceId}`
     );
 
     res.json({
@@ -66,14 +65,12 @@ router.get('/', async (req: WorkspaceRequest, res: Response): Promise<void> => {
         lastScheduledRunAt: workspace.lastScheduledRunAt,
         nextRunAt: wsRepeatable && wsRepeatable.next ? new Date(wsRepeatable.next).toISOString() : null,
         cronPattern: wsRepeatable ? wsRepeatable.pattern : null,
-        primaryBusiness: primaryBiz
-          ? {
-              id: primaryBiz.id,
-              name: primaryBiz.name,
-              dataStale: primaryBiz.dataStale,
-              lastAnalyzedAt: primaryBiz.lastAnalyzedAt,
-            }
-          : null,
+        businesses: allBusinesses.map((biz) => ({
+          id: biz.id,
+          name: biz.name,
+          dataStale: biz.dataStale,
+          lastAnalyzedAt: biz.lastAnalyzedAt,
+        })),
       },
     });
   } catch (err: any) {
@@ -124,21 +121,28 @@ router.put('/', async (req: WorkspaceRequest, res: Response): Promise<void> => {
       .where(eq(workspaces.id, workspaceId))
       .returning();
 
-    // 2. Synchronize BullMQ repeatable job
-    const [primaryBiz] = await db
+    // 2. Synchronize BullMQ repeatable jobs for ALL businesses in the workspace
+    await removeWorkspaceRepeatableJobs(workspaceId);
+
+    const allBusinesses = await db
       .select()
       .from(businesses)
-      .where(eq(businesses.workspaceId, workspaceId))
-      .limit(1);
+      .where(eq(businesses.workspaceId, workspaceId));
 
-    let scheduleStatus = { scheduled: false };
-    if (primaryBiz) {
-      scheduleStatus = await scheduleWorkspaceResearch({
+    const scheduleResults: Array<{ businessId: string; scheduled: boolean; pattern?: string }> = [];
+    for (const biz of allBusinesses) {
+      const result = await scheduleWorkspaceResearch({
         workspaceId,
         cadence: refreshCadence,
-        businessId: primaryBiz.id,
+        businessId: biz.id,
       });
+      scheduleResults.push({ businessId: biz.id, ...result });
     }
+
+    const scheduleStatus = {
+      scheduled: scheduleResults.some((r) => r.scheduled),
+      businesses: scheduleResults,
+    };
 
     res.json({
       success: true,
@@ -170,13 +174,12 @@ router.post('/trigger', async (req: WorkspaceRequest, res: Response): Promise<vo
   }
 
   try {
-    const [primaryBiz] = await db
+    const allBusinesses = await db
       .select()
       .from(businesses)
-      .where(eq(businesses.workspaceId, workspaceId))
-      .limit(1);
+      .where(eq(businesses.workspaceId, workspaceId));
 
-    if (!primaryBiz) {
+    if (allBusinesses.length === 0) {
       res.status(404).json({
         success: false,
         error: { code: 'NOT_FOUND', message: 'No business found in workspace to refresh' },
@@ -184,16 +187,20 @@ router.post('/trigger', async (req: WorkspaceRequest, res: Response): Promise<vo
       return;
     }
 
-    const result = await triggerImmediateRefresh({
-      workspaceId,
-      businessId: primaryBiz.id,
-    });
+    const results = [];
+    for (const biz of allBusinesses) {
+      const result = await triggerImmediateRefresh({
+        workspaceId,
+        businessId: biz.id,
+      });
+      results.push({ businessId: biz.id, businessName: biz.name, ...result });
+    }
 
     res.json({
       success: true,
       data: {
-        message: `Immediate refresh enqueued for "${primaryBiz.name}"`,
-        ...result,
+        message: `Immediate refresh enqueued for ${results.length} business(es)`,
+        results,
       },
     });
   } catch (err: any) {

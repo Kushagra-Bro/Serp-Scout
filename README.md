@@ -23,8 +23,7 @@
   <img src="https://img.shields.io/badge/Drizzle%20ORM-C5F74F?style=for-the-badge&logo=drizzle&logoColor=black" alt="Drizzle ORM">
   <img src="https://img.shields.io/badge/Upstash%20Redis-00E599?style=for-the-badge&logo=redis&logoColor=black" alt="Upstash Redis">
   <img src="https://img.shields.io/badge/BullMQ-CC3534?style=for-the-badge&logo=npm&logoColor=white" alt="BullMQ">
-  <img src="https://img.shields.io/badge/Resend-000000?style=for-the-badge&logo=resend&logoColor=white" alt="Resend">
-  <img src="https://img.shields.io/badge/Clerk-6C47FF?style=for-the-badge&logo=clerk&logoColor=white" alt="Clerk">
+  <img src="https://img.shields.io/badge/JWT%20Auth-000000?style=for-the-badge&logo=jsonwebtokens&logoColor=white" alt="JWT Auth">
   <img src="https://img.shields.io/badge/Turborepo-EF4444?style=for-the-badge&logo=turborepo&logoColor=white" alt="Turborepo">
 </p>
 
@@ -75,7 +74,7 @@ Small business owners don't need vanity SEO metrics (Domain Authority, Page Auth
 * **Tangible Outcome & Win Tracker**: Correlates completed recommendations with subsequent SERP rank sweeps to compute exact position improvements (e.g. `Climbed +4 spots for "dentist near me"`).
 * **Client & White-Label Web Sharing**: Generates tokenized, read-only public links (`/shared/[token]`) for external stakeholders with dual-view mode toggles (Executive vs Specialist view) and PDF print styling.
 * **Triggered Emergency Market Shift Alerts**: Out-of-cycle flash alerts detecting Google 3-Pack displacement, sharp rank drops ($\ge 3$ spots), competitor sponsored Google Ads campaigns, and negative review spikes, paired with transactional email alerts.
-* **Automated Scheduling & Notifications**: BullMQ repeat queues running on Upstash Redis TLS dispatch daily, weekly, or monthly scheduled runs, perform background stale data checks, and deliver single-notification transactional emails via Resend. Because repeat jobs only execute while a worker process is running, a **catch-up reconciliation** pass (`src/jobs/catchup.ts`) runs on boot and every 6 hours: it compares `lastAnalyzedAt` against each workspace's cadence in Postgres and enqueues whatever is overdue, so occurrences missed by downtime or a Redis flush are repaired instead of silently skipped.
+* **Automated Scheduling & Notifications**: BullMQ repeat queues running on Upstash Redis TLS dispatch daily, weekly, or monthly scheduled runs for **every business** in a workspace, perform background stale data checks, and deliver deduplicated transactional emails via Resend. Because repeat jobs only execute while a worker process is running, a **catch-up reconciliation** pass (`src/jobs/catchup.ts`) runs on boot and every 6 hours: it compares `lastAnalyzedAt` against each workspace's cadence in Postgres and enqueues whatever is overdue, so occurrences missed by downtime or a Redis flush are repaired instead of silently skipped. Manual refreshes are deduplicated via BullMQ's `deduplication` option to prevent duplicate jobs from repeated clicks.
 * **Enterprise Multi-Tenant Security**: Zero cross-workspace data leakage, strict monthly search quotas (HTTP 429), and robust SSRF filtering preventing internal network probes.
 
 ---
@@ -86,7 +85,7 @@ Small business owners don't need vanity SEO metrics (Domain Authority, Page Auth
 flowchart TD
     subgraph Client["Client Tier (apps/web)"]
         UI["Next.js 14 App Router\n(Tailwind CSS + SWR)"]
-        ClerkAuth["Clerk Auth\n(Session & Multi-Tenant JWT)"]
+        NativeAuth["Native JWT Auth\n(Session & Multi-Tenant State)"]
         PublicShare["Client Share Portal\n(/shared/[token])"]
     end
 
@@ -163,7 +162,7 @@ START → analyze_website → plan_queries → search_sweep
     │   │   │   ├── config/            # Environment parsing & validation (Zod)
     │   │   │   ├── db/                # Neon database client & schema exports
     │   │   │   ├── jobs/              # BullMQ queue definitions, workers & schedulers
-    │   │   │   ├── middleware/        # Clerk auth, workspace isolation, rate limiting
+    │   │   │   ├── middleware/        # JWT auth, workspace isolation, rate limiting
     │   │   │   ├── routes/            # REST API endpoints (businesses, reports, searches)
     │   │   │   └── services/          # Market shift, PDF, notifications, SerpApi research gateway
     │   │   ├── scripts/               # Dev/verification scripts (excluded from prod build)
@@ -173,7 +172,7 @@ START → analyze_website → plan_queries → search_sweep
     │       │   ├── app/               # Routes (dashboard, competitors, keywords, local, reports, shared)
     │       │   ├── components/        # UI components (sidebar, navigation, cards, badges)
     │       │   ├── lib/               # API client, utility functions
-    │       │   └── middleware.ts      # Clerk authentication middleware with public route rules
+    │       │   └── middleware.ts      # Authentication & route protection middleware
     │       └── package.json
     ├── packages/
     │   ├── agents/                    # Multi-agent intelligence & recommendation pipelines
@@ -205,7 +204,7 @@ START → analyze_website → plan_queries → search_sweep
 
 | Module / File | Responsibility |
 | :--- | :--- |
-| `src/index.ts` | Server entrypoint, CORS, Clerk auth mounting, and public shared router registration. |
+| `src/index.ts` | Server entrypoint, CORS, auth routes mounting, and public shared router registration. |
 | `src/routes/research-graph.ts` | LangGraph pipeline trigger (`POST .../analysis/run`) and latest-run status endpoint. |
 | `src/routes/reports.ts` | Report CRUD, sub-task checklist toggles, outcome metrics, and tokenized share links. |
 | `src/routes/businesses.ts` | Business management, location autocomplete (`/locations/search`), and service profiles. |
@@ -216,6 +215,8 @@ START → analyze_website → plan_queries → search_sweep
 | `src/services/notification.service.ts` | Resend transactional email service with weekly briefs and emergency market alerts. |
 | `src/jobs/workers/` | BullMQ background workers (`research.worker.ts`, `report.worker.ts`, `stale-check.worker.ts`, `research-graph.worker.ts`). |
 | `src/jobs/catchup.ts` | Cadence reconciliation: enqueues a refresh for any business whose `lastAnalyzedAt` is older than its `refreshCadence` (runs on boot + every 6h). |
+| `src/jobs/scheduler.ts` | BullMQ repeatable job registration for all businesses per workspace, stale-check and catch-up timers, and deduplicated manual refresh triggers. |
+| `src/routes/schedules.ts` | Schedule settings API: cadence, notification email, stale threshold, per-business schedule status, and multi-business immediate refresh. |
 | `scripts/` | Dev verification scripts (`test-milestone*.ts`, `generate-milestones-pdf.ts`); excluded from the prod build via tsconfig. |
 
 </blockquote>
@@ -234,7 +235,7 @@ START → analyze_website → plan_queries → search_sweep
 | `src/app/(app)/keywords/page.tsx` | Keyword Opportunity Radar with multi-factor scoring and ranking trajectory tracking. |
 | `src/app/(app)/onboarding/page.tsx` | Instant onboarding flow with website extraction and location autocomplete. |
 | `src/components/` | Shared UI (ErrorBanner) plus extracted page sections (`content/`, `local/`). |
-| `src/middleware.ts` | Clerk security middleware with protected application routes and public share access. |
+| `src/middleware.ts` | Route security middleware with protected application routes and public share access. |
 
 </blockquote>
 </details>
@@ -283,8 +284,7 @@ START → analyze_website → plan_queries → search_sweep
 - **Node.js**: `v20.x` or higher
 - **PNPM**: `v9.x` or higher
 - **Docker**: For running local Redis (or an [Upstash Redis](https://upstash.com) instance)
-- **API Credentials**:
-  - [Clerk](https://clerk.com) (Authentication & user management)
+- **External Services & APIs**:
   - [Neon](https://neon.tech) (Serverless PostgreSQL)
   - [Groq](https://groq.com) (High-speed LLM inference)
   - [SerpApi](https://serpapi.com) (Search engine results & Google Maps)
@@ -303,20 +303,42 @@ cp apps/api/.env.example apps/api/.env
 cp apps/web/.env.example apps/web/.env.local
 ```
 
-Key variables in `apps/api/.env`:
+#### Backend API (`apps/api/.env`)
 
 ```env
 NODE_ENV=development
 PORT=3001
+
+# Neon PostgreSQL Database
 DATABASE_URL=postgresql://user:pass@ep-xyz.neon.tech/neondb?sslmode=require
+
+# Redis (Local Docker or Upstash TLS)
 REDIS_URL=redis://localhost:6379
-CLERK_SECRET_KEY=sk_test_...
-CLERK_PUBLISHABLE_KEY=pk_test_...
-GROQ_API_KEY=gsk_...
+
+# Native Authentication (Bcrypt + HS256 JWT)
+JWT_SECRET=your-secure-jwt-secret-key-at-least-32-chars
+
+# SerpApi (Google Organic, Maps, News, Locations)
+SERPAPI_KEY=your_serpapi_key
+
+# Groq LLM Inference
+GROQ_API_KEY=gsk_your_groq_api_key
 GROQ_MODEL=openai/gpt-oss-120b
-SERPAPI_KEY=...
-TAVILY_API_KEY=...
-RESEND_API_KEY=re_...
+
+# Resend Transactional Email
+RESEND_API_KEY=re_your_resend_api_key
+EMAIL_FROM=noreply@serp-scout.app
+
+# Cross-Origin Frontend & Limits
+FRONTEND_URL=http://localhost:3000
+DEFAULT_MONTHLY_QUOTA=500
+```
+
+#### Frontend Web (`apps/web/.env.local`)
+
+```env
+# Backend API Base URL
+NEXT_PUBLIC_API_URL=http://localhost:3001
 ```
 
 ### Installation & Setup

@@ -10,7 +10,6 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@clerk/nextjs": "^6.12.4",
     "@serp-scout/types": "workspace:*",
     "clsx": "^2.1.1",
     "lucide-react": "^0.477.0",

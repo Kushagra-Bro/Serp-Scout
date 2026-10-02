@@ -257,6 +257,29 @@ export class NotificationService {
     const { workspaceId, businessId, businessName, alertTitle, alertDescription, severity, recipientEmail } = params;
     const subject = `🚨 [EMERGENCY ALERT] ${businessName}: ${alertTitle}`;
 
+    // DEDUPLICATION CHECK: ensure only one notification per alert title per business
+    const [existingNotification] = await db
+      .select()
+      .from(notifications)
+      .where(
+        and(
+          eq(notifications.businessId, businessId),
+          eq(notifications.type, 'alert'),
+          eq(notifications.subject, subject)
+        )
+      )
+      .limit(1);
+
+    if (existingNotification) {
+      console.log(`[NotificationService] Alert notification already recorded (status: ${existingNotification.status}) for "${alertTitle}". Skipping duplicate.`);
+      return {
+        success: existingNotification.status === 'sent',
+        duplicate: true,
+        notificationId: existingNotification.id,
+        externalId: existingNotification.externalId || undefined,
+      };
+    }
+
     const htmlBody = `
       <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; color: #0f172a;">
         <div style="background: #fee2e2; border: 1px solid #f87171; border-radius: 12px; padding: 20px; margin-bottom: 24px;">

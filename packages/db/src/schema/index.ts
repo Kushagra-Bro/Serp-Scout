@@ -30,12 +30,13 @@ export const workspaces = pgTable('workspaces', {
 
 // 2. Users
 export const users = pgTable('users', {
-  id: varchar('id', { length: 255 }).primaryKey(), // Clerk user ID
+  id: varchar('id', { length: 255 }).primaryKey(), // User ID (e.g. usr_...)
   workspaceId: uuid('workspace_id')
-    .references(() => workspaces.id, { onDelete: 'cascade' })
-    .notNull(),
+    .references(() => workspaces.id, { onDelete: 'set null' }),
   name: varchar('name', { length: 255 }).notNull(),
   email: varchar('email', { length: 255 }).notNull(),
+  passwordHash: varchar('password_hash', { length: 255 }),
+  avatarUrl: text('avatar_url'),
   role: varchar('role', { length: 50 }).default('owner').notNull(), // 'owner' | 'admin' | 'analyst' | 'viewer'
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),

@@ -95,6 +95,7 @@ export async function requireWorkspace(
         .where(eq(workspaces.ownerId, userId))
         .limit(1);
 
+      const userEmail = (req as any)._parsedAuth?.userEmail || `${userId}@user.local`;
       if (ownedWs.length > 0) {
         await db
           .insert(users)
@@ -102,7 +103,7 @@ export async function requireWorkspace(
             id: userId,
             workspaceId: ownedWs[0].id,
             name: 'Workspace Owner',
-            email: `${userId}@user.clerk`,
+            email: userEmail,
             role: 'owner',
           })
           .onConflictDoUpdate({
@@ -112,35 +113,6 @@ export async function requireWorkspace(
 
         const wsReq = req as WorkspaceRequest;
         wsReq.workspace = ownedWs[0];
-        wsReq.userRole = 'owner';
-        return next();
-      }
-
-      // Fallback 2: In development/local mode, if an existing active workspace exists, auto-link user
-      // so business profiles are never orphaned when dev server restarts or test cookies refresh
-      const anyWs = await db
-        .select()
-        .from(workspaces)
-        .orderBy(desc(workspaces.createdAt))
-        .limit(1);
-
-      if (anyWs.length > 0) {
-        await db
-          .insert(users)
-          .values({
-            id: userId,
-            workspaceId: anyWs[0].id,
-            name: 'Workspace Owner',
-            email: `${userId}@user.clerk`,
-            role: 'owner',
-          })
-          .onConflictDoUpdate({
-            target: users.id,
-            set: { workspaceId: anyWs[0].id, role: 'owner' },
-          });
-
-        const wsReq = req as WorkspaceRequest;
-        wsReq.workspace = anyWs[0];
         wsReq.userRole = 'owner';
         return next();
       }

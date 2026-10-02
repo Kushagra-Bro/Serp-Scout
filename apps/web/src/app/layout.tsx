@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { ClerkProvider } from '@clerk/nextjs';
+import { AuthProvider } from '@/lib/auth';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -21,16 +21,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <ClerkProvider>
-      {/* suppressHydrationWarning applies only to the element it's on (it does
-          not cascade), so both tags need it. Clerk and browser extensions such
-          as Grammarly/Google Translate inject attributes into <html>/<body>
-          after SSR but before React hydrates; without this React logs a spurious
-          "Extra attributes from the server" warning. Content mismatches inside
-          these elements are still reported normally. */}
+    <AuthProvider>
       <html lang="en" suppressHydrationWarning>
         <body suppressHydrationWarning>{children}</body>
       </html>
-    </ClerkProvider>
+    </AuthProvider>
   );
 }

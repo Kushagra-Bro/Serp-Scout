@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useAuth } from '@clerk/nextjs';
+import { useAuth } from '@/lib/auth';
 import { apiClient } from '@/lib/api';
 import AuthLoadingScreen from '@/components/AuthLoadingScreen';
 import {

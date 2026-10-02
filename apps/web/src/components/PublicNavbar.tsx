@@ -2,7 +2,8 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
-import { useUser, SignedIn, SignedOut, UserButton } from '@clerk/nextjs';
+import { useUser, SignedIn, SignedOut } from '@/lib/auth';
+import { UserButton } from '@/components/UserButton';
 import { ArrowRight, Menu, X, Lock, User as UserIcon } from 'lucide-react';
 
 function getUserDisplayName(user: any): string {

@@ -2,20 +2,13 @@
 
 import React from 'react';
 import Link from 'next/link';
-import { useUser, SignedIn, SignedOut } from '@clerk/nextjs';
+import { useUser, SignedIn, SignedOut } from '@/lib/auth';
 import { User } from 'lucide-react';
 
 function getUserDisplayName(user: any): string {
   if (!user) return 'Dashboard';
-  if (user.fullName && user.fullName.trim()) return user.fullName;
-  if (user.firstName && user.firstName.trim()) return user.firstName;
-  if (user.username && user.username.trim()) return user.username;
-  if (user.primaryEmailAddress?.emailAddress) {
-    return user.primaryEmailAddress.emailAddress.split('@')[0];
-  }
-  if (user.emailAddresses && user.emailAddresses[0]?.emailAddress) {
-    return user.emailAddresses[0].emailAddress.split('@')[0];
-  }
+  if (user.name && user.name.trim()) return user.name;
+  if (user.email) return user.email.split('@')[0];
   return 'Dashboard';
 }
 
@@ -102,8 +95,8 @@ export default function PublicFooter() {
                 href="/app"
                 className="inline-flex items-center gap-2 text-xs font-semibold text-cyan-400 hover:text-cyan-300 transition bg-slate-900/90 border border-slate-700/80 hover:border-cyan-500/50 px-3.5 py-1.5 rounded-full shadow-sm"
               >
-                {user?.imageUrl ? (
-                  <img src={user.imageUrl} alt={getUserDisplayName(user)} className="w-4 h-4 rounded-full object-cover ring-1 ring-cyan-400/60" />
+                {user?.avatarUrl ? (
+                  <img src={user.avatarUrl} alt={getUserDisplayName(user)} className="w-4 h-4 rounded-full object-cover ring-1 ring-cyan-400/60" />
                 ) : (
                   <User className="w-3.5 h-3.5 text-cyan-400" />
                 )}

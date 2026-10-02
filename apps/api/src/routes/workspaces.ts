@@ -1,7 +1,7 @@
 import { Router, Response } from 'express';
 import { z } from 'zod';
-import { eq, sql, desc } from 'drizzle-orm';
-import { db, workspaces, users, businesses, searchRuns } from '../db/index.js';
+import { eq, sql, desc, inArray } from 'drizzle-orm';
+import { db, workspaces, users, businesses, searchRuns, marketAlerts, reportShares } from '../db/index.js';
 import { AuthenticatedRequest } from '../middleware/auth.js';
 
 const router = Router();
@@ -62,7 +62,7 @@ router.post('/', async (req: AuthenticatedRequest, res: Response): Promise<void>
         id: userId,
         workspaceId: newWs.id,
         name: userName,
-        email: userEmail || `${userId}@user.clerk`,
+        email: userEmail || (req as any)._parsedAuth?.userEmail || `${userId}@user.local`,
         role: 'owner',
       })
       .onConflictDoUpdate({
@@ -107,29 +107,20 @@ router.get('/me', async (req: AuthenticatedRequest, res: Response): Promise<void
       .where(eq(users.id, userId));
 
     if (userMemberships.length === 0) {
-      // Auto-heal membership if owned workspace exists or if workspace exists in DB
+      // Auto-heal membership if owned workspace exists for this user
       const ownedWs = await db
         .select()
         .from(workspaces)
         .where(eq(workspaces.ownerId, userId))
         .limit(1);
 
-      const targetWs = ownedWs[0] || (await db.select().from(workspaces).orderBy(desc(workspaces.createdAt)).limit(1))[0];
+      const targetWs = ownedWs[0];
 
       if (targetWs) {
         await db
-          .insert(users)
-          .values({
-            id: userId,
-            workspaceId: targetWs.id,
-            name: 'Workspace Owner',
-            email: `${userId}@user.clerk`,
-            role: 'owner',
-          })
-          .onConflictDoUpdate({
-            target: users.id,
-            set: { workspaceId: targetWs.id, role: 'owner' },
-          });
+          .update(users)
+          .set({ workspaceId: targetWs.id, role: 'owner', updatedAt: new Date() })
+          .where(eq(users.id, userId));
 
         userMemberships = [
           {
@@ -251,7 +242,25 @@ router.delete('/:id', async (req: AuthenticatedRequest, res: Response): Promise<
       return;
     }
 
-    // Cascade delete workspace in DB
+    // 1. Find all businesses in this workspace to safely clean up any related alerts or shares
+    const wsBusinesses = await db
+      .select({ id: businesses.id })
+      .from(businesses)
+      .where(eq(businesses.workspaceId, workspaceId));
+
+    const bizIds = wsBusinesses.map((b) => b.id);
+    if (bizIds.length > 0) {
+      await db.delete(marketAlerts).where(inArray(marketAlerts.businessId, bizIds));
+      await db.delete(reportShares).where(inArray(reportShares.businessId, bizIds));
+    }
+
+    // 2. Unlink any users tied to this workspace so user account credentials are NOT destroyed
+    await db
+      .update(users)
+      .set({ workspaceId: null, updatedAt: new Date() })
+      .where(eq(users.workspaceId, workspaceId));
+
+    // 3. Cascade delete workspace in DB (will delete businesses, competitors, keywords, search runs, reports, recommendations, etc.)
     await db.delete(workspaces).where(eq(workspaces.id, workspaceId));
 
     res.json({

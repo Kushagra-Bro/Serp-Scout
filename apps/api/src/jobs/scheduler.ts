@@ -10,19 +10,33 @@ export const CADENCE_CRON_PATTERNS: Record<string, string> = {
 
 /**
  * Removes any existing repeatable research jobs for a specific workspace.
+ *
+ * Matches on the exact workspaceId segment rather than a substring, so that
+ * removing jobs for `ws-12` does not also remove jobs for `ws-1`.
  */
 export async function removeWorkspaceRepeatableJobs(workspaceId: string): Promise<void> {
   const repeatableJobs = await researchQueue.getRepeatableJobs();
   for (const job of repeatableJobs) {
-    if (job.id?.includes(workspaceId) || job.key.includes(workspaceId)) {
-      console.log(`[Scheduler] Removing existing repeatable job: ${job.key}`);
-      await researchQueue.removeRepeatableByKey(job.key);
+    const key = job.key ?? '';
+    // Repeatable job keys look like:
+    //   bull:research-run:repeat:<workspaceId>:<businessId>:<patternHash>
+    // Match the workspaceId as a delimited segment, not a raw substring.
+    const segments = key.split(':');
+    const matches = segments.includes(workspaceId) || job.id === `repeat-${workspaceId}`;
+
+    if (matches) {
+      console.log(`[Scheduler] Removing existing repeatable job: ${key}`);
+      await researchQueue.removeRepeatableByKey(key);
     }
   }
 }
 
 /**
- * Registers or updates a workspace's research schedule in BullMQ.
+ * Registers a repeatable research job for a single business.
+ *
+ * Does NOT clear existing jobs for the workspace — the caller is responsible
+ * for removing stale jobs before registering new ones. This prevents a
+ * multi-business workspace from wiping sibling jobs when scheduling.
  */
 export async function scheduleWorkspaceResearch(params: {
   workspaceId: string;
@@ -30,9 +44,6 @@ export async function scheduleWorkspaceResearch(params: {
   businessId: string;
 }): Promise<{ scheduled: boolean; pattern?: string }> {
   const { workspaceId, cadence, businessId } = params;
-
-  // Always clear previous schedule first
-  await removeWorkspaceRepeatableJobs(workspaceId);
 
   if (cadence === 'manual') {
     console.log(`[Scheduler] Cadence set to manual for workspace ${workspaceId}. No recurring job registered.`);
@@ -130,6 +141,9 @@ export async function triggerImmediateRefresh(params: {
     },
     {
       priority: 1, // Higher priority for user-initiated refreshes
+      // Deduplicate: repeated clicks within the same cadence window collapse
+      // into a single job instead of enqueueing a pile of duplicates.
+      deduplication: { id: `manual-refresh:${workspaceId}:${businessId}` },
     }
   );
 
@@ -152,17 +166,20 @@ export async function syncAllWorkspaceSchedules(): Promise<void> {
     const allWorkspaces = await db.select().from(workspaces);
     for (const ws of allWorkspaces) {
       if (ws.refreshCadence && ws.refreshCadence !== 'manual') {
-        const [primaryBiz] = await db
+        // Remove all existing repeatable jobs for this workspace first, then
+        // register a fresh job for EVERY business — not just the first one.
+        await removeWorkspaceRepeatableJobs(ws.id);
+
+        const allBusinesses = await db
           .select()
           .from(businesses)
-          .where(eq(businesses.workspaceId, ws.id))
-          .limit(1);
+          .where(eq(businesses.workspaceId, ws.id));
 
-        if (primaryBiz) {
+        for (const biz of allBusinesses) {
           await scheduleWorkspaceResearch({
             workspaceId: ws.id,
             cadence: ws.refreshCadence as 'daily' | 'weekly' | 'monthly' | 'manual',
-            businessId: primaryBiz.id,
+            businessId: biz.id,
           });
         }
       }

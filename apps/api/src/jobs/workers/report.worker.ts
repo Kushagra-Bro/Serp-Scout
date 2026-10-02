@@ -11,6 +11,7 @@ import {
   reports,
   recommendations,
   sourceEvidence,
+  competitors,
 } from '../../db/index.js';
 import {
   generateWeeklyReport,
@@ -59,6 +60,12 @@ export async function executeReportGeneration(data: ReportJobData) {
     .from(keywords)
     .where(eq(keywords.businessId, businessId));
 
+  // Fetch real competitor data for benchmarking
+  const competitorList = await db
+    .select()
+    .from(competitors)
+    .where(eq(competitors.businessId, businessId));
+
   const rankingChanges = [];
   for (const kw of trackedKeywords) {
     const obs = await db
@@ -75,13 +82,22 @@ export async function executeReportGeneration(data: ReportJobData) {
         ? previousRank - currentRank // positive delta = rank improved
         : null;
 
+    // Find the best competitor rank for this keyword from real data
+    const competitorRanks = competitorList
+      .map((c) => (c.metadata as any)?.keywordRanks?.[kw.phrase])
+      .filter((r): r is number => typeof r === 'number' && r > 0);
+    const bestCompetitorRank = competitorRanks.length > 0 ? Math.min(...competitorRanks) : null;
+    const bestCompetitor = competitorList.find(
+      (c) => (c.metadata as any)?.keywordRanks?.[kw.phrase] === bestCompetitorRank
+    );
+
     rankingChanges.push({
       phrase: kw.phrase,
       currentRank,
       previousRank,
       delta,
-      bestCompetitorRank: 2, // benchmark
-      bestCompetitorDomain: 'competitor.com',
+      bestCompetitorRank,
+      bestCompetitorDomain: bestCompetitor?.domain || null,
     });
   }
 
@@ -92,20 +108,27 @@ export async function executeReportGeneration(data: ReportJobData) {
     .where(eq(contentGaps.businessId, businessId))
     .limit(5);
 
-  const mappedGaps = existingGaps.map((g) => ({
-    topic: g.topic,
-    competitorDomain: 'competitor.com',
-    competitorUrl: 'https://competitor.com/service',
-    recommendedPageType: (g.recommendedPageType as any) || 'service',
-    suggestedTitle: g.suggestedTitle || g.topic,
-    suggestedHeadings: (g.suggestedHeadings as string[]) || ['Overview', 'Pricing'],
-    suggestedFaqs: (g.suggestedFaqs as string[]) || ['How does this work?'],
-    targetIntent: (g.targetIntent as any) || 'commercial',
-    estimatedImpact: (g.impact as any) || 'high',
-    estimatedEffort: (g.effort as any) || 'medium',
-    priority: (g.priority as any) || 'P1',
-    evidenceUrls: ['https://competitor.com/service'],
-  }));
+  const mappedGaps = existingGaps.map((g) => {
+    // Find the real competitor that owns this content gap
+    const gapCompetitor = competitorList.find(
+      (c) => g.competitorId === c.id || (c.metadata as any)?.contentGapTopics?.includes(g.topic)
+    );
+
+    return {
+      topic: g.topic,
+      competitorDomain: gapCompetitor?.domain || '',
+      competitorUrl: gapCompetitor?.domain ? `https://${gapCompetitor.domain}` : '',
+      recommendedPageType: (g.recommendedPageType as any) || 'service',
+      suggestedTitle: g.suggestedTitle || g.topic,
+      suggestedHeadings: (g.suggestedHeadings as string[]) || ['Overview', 'Pricing'],
+      suggestedFaqs: (g.suggestedFaqs as string[]) || ['How does this work?'],
+      targetIntent: (g.targetIntent as any) || 'commercial',
+      estimatedImpact: (g.impact as any) || 'high',
+      estimatedEffort: (g.effort as any) || 'medium',
+      priority: (g.priority as any) || 'P1',
+      evidenceUrls: gapCompetitor?.domain ? [`https://${gapCompetitor.domain}`] : [],
+    };
+  });
 
   const periodStart = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
   const periodEnd = new Date().toISOString();
@@ -124,7 +147,7 @@ export async function executeReportGeneration(data: ReportJobData) {
     periodEnd,
   });
 
-  // 7. Save report in Neon DB
+  // 6. Save report in Neon DB
   const [newReport] = await db
     .insert(reports)
     .values({
@@ -137,7 +160,7 @@ export async function executeReportGeneration(data: ReportJobData) {
     })
     .returning();
 
-  // 8. Save recommendations & evidence
+  // 7. Save recommendations & evidence
   for (const action of generatedReport.actionPlan) {
     const steps = action.implementationSteps && action.implementationSteps.length > 0
       ? action.implementationSteps
@@ -183,7 +206,7 @@ export async function executeReportGeneration(data: ReportJobData) {
     }
   }
 
-  // 9. Generate PDF preview buffer
+  // 8. Generate PDF preview buffer
   try {
     const pdfBuffer = await generateReportPdf({
       businessName: business.name,

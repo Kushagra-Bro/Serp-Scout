@@ -3,7 +3,8 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useUser, SignedIn, SignedOut, UserButton } from '@clerk/nextjs';
+import { useUser, SignedIn, SignedOut } from '@/lib/auth';
+import { UserButton } from '@/components/UserButton';
 import {
   Search,
   Sparkles,
