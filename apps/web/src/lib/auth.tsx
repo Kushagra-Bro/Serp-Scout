@@ -59,6 +59,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(JSON.parse(storedUser));
         if (storedWs) setWorkspaceId(storedWs);
 
+        // Reveal the app immediately: cached credentials are trusted up-front so
+        // pages can start their data loads without waiting on a network round-trip.
+        // Tokens are valid for 30d; the verification below reconciles in the
+        // background and clears state if the token has since been revoked.
+        setIsLoaded(true);
+
         // Verify token in background
         fetch(`${API_BASE_URL}/api/auth/me`, {
           headers: { Authorization: `Bearer ${storedToken}` },
