@@ -17,7 +17,8 @@
     "db:generate": "drizzle-kit generate",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:duplicates": "node test-unique-url.mjs && node test-drizzle-insert.mjs && node test-js-db-agreement.mjs && node test-http-409.mjs"
   },
   "dependencies": {
     "@neondatabase/serverless": "^0.10.4",

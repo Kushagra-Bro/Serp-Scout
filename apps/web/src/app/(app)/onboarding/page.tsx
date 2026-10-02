@@ -553,7 +553,13 @@ export default function OnboardingPage() {
       router.push(`/app?${navParams.toString()}`);
     } catch (err: any) {
       console.error('Onboarding submission failed:', err);
-      setError(err.message || 'Failed to complete onboarding. Please try again.');
+      if (err?.code === 'DUPLICATE_WEBSITE') {
+        setError(
+          `${err.message} Use a different website, or open the existing profile from your dashboard to add a new location.`
+        );
+      } else {
+        setError(err.message || 'Failed to complete onboarding. Please try again.');
+      }
     } finally {
       setLoading(false);
     }

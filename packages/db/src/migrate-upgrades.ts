@@ -42,6 +42,51 @@ async function run() {
   );`;
   console.log('✓ Table market_alerts verified');
 
+  // Duplicate-website guard.
+  //
+  // The application returns 409 in routes/businesses.ts, but that only covers
+  // sequential requests -- two concurrent POSTs would both pass the SELECT and
+  // insert twice, doubling SerpApi quota spend on identical data. The column is
+  // GENERATED so Postgres always agrees with normalizeWebsiteUrl() in
+  // apps/api/src/lib/website-url.ts, and the unique index closes the race.
+  //
+  // Refuse to proceed if duplicates already exist rather than deleting rows.
+  const dupes = await sql`
+    SELECT "workspace_id", "normalized_url", COUNT(*)::int AS n
+    FROM (
+      SELECT "workspace_id",
+             CASE
+               WHEN length(regexp_replace(regexp_replace(regexp_replace(lower(btrim("website_url")), '#.*$', ''), '^https?://', ''), '^www\.', '')) > 1
+               THEN regexp_replace(regexp_replace(regexp_replace(regexp_replace(lower(btrim("website_url")), '#.*$', ''), '^https?://', ''), '^www\.', ''), '/+$', '')
+               ELSE regexp_replace(regexp_replace(regexp_replace(lower(btrim("website_url")), '#.*$', ''), '^https?://', ''), '^www\.', '')
+             END AS "normalized_url"
+      FROM "businesses"
+    ) AS derived
+    GROUP BY 1, 2 HAVING COUNT(*) > 1;`;
+
+  if (dupes.length > 0) {
+    console.error(`✗ ${dupes.length} duplicate website(s) already exist -- fix these before adding the unique index:`);
+    for (const d of dupes) {
+      console.error(`   workspace ${d.workspace_id}: "${d.normalized_url}" x${d.n}`);
+    }
+    process.exit(1);
+  }
+
+  await sql`ALTER TABLE "businesses"
+    ADD COLUMN IF NOT EXISTS "normalized_url" text
+    GENERATED ALWAYS AS (
+      CASE
+        WHEN length(regexp_replace(regexp_replace(regexp_replace(lower(btrim("website_url")), '#.*$', ''), '^https?://', ''), '^www\.', '')) > 1
+        THEN regexp_replace(regexp_replace(regexp_replace(regexp_replace(lower(btrim("website_url")), '#.*$', ''), '^https?://', ''), '^www\.', ''), '/+$', '')
+        ELSE regexp_replace(regexp_replace(regexp_replace(lower(btrim("website_url")), '#.*$', ''), '^https?://', ''), '^www\.', '')
+      END
+    ) STORED;`;
+  console.log('✓ Column businesses.normalized_url verified (generated)');
+
+  await sql`CREATE UNIQUE INDEX IF NOT EXISTS "businesses_workspace_normalized_url_uniq"
+    ON "businesses" ("workspace_id", "normalized_url");`;
+  console.log('✓ Index businesses_workspace_normalized_url_uniq verified (one website per workspace)');
+
   console.log('🎉 Database migration complete!');
 }
 

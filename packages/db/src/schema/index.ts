@@ -9,8 +9,9 @@ import {
   numeric,
   real,
   jsonb,
+  uniqueIndex,
 } from 'drizzle-orm/pg-core';
-import { relations } from 'drizzle-orm';
+import { relations, sql } from 'drizzle-orm';
 
 // 1. Workspaces
 export const workspaces = pgTable('workspaces', {
@@ -43,25 +44,47 @@ export const users = pgTable('users', {
 });
 
 // 3. Businesses
-export const businesses = pgTable('businesses', {
-  id: uuid('id').defaultRandom().primaryKey(),
-  workspaceId: uuid('workspace_id')
-    .references(() => workspaces.id, { onDelete: 'cascade' })
-    .notNull(),
-  name: varchar('name', { length: 255 }).notNull(),
-  websiteUrl: text('website_url').notNull(),
-  industry: varchar('industry', { length: 255 }),
-  description: text('description'),
-  country: varchar('country', { length: 100 }),
-  city: varchar('city', { length: 100 }),
-  serviceArea: text('service_area'),
-  primaryGoal: text('primary_goal'),
-  timezone: varchar('timezone', { length: 100 }).default('UTC'),
-  dataStale: boolean('data_stale').default(false).notNull(),
-  lastAnalyzedAt: timestamp('last_analyzed_at', { withTimezone: true }),
-  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
-});
+export const businesses = pgTable(
+  'businesses',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    workspaceId: uuid('workspace_id')
+      .references(() => workspaces.id, { onDelete: 'cascade' })
+      .notNull(),
+    name: varchar('name', { length: 255 }).notNull(),
+    websiteUrl: text('website_url').notNull(),
+    // Denormalized form of websiteUrl, computed by Postgres so it can never
+    // drift from what the app writes. Must mirror normalizeWebsiteUrl() in
+    // apps/api/src/lib/website-url.ts.
+    normalizedUrl: text('normalized_url').generatedAlwaysAs(() => sql`
+      case
+        when length(regexp_replace(regexp_replace(regexp_replace(lower(btrim("website_url")), '#.*$', ''), '^https?://', ''), '^www\.', '')) > 1
+        then regexp_replace(regexp_replace(regexp_replace(regexp_replace(lower(btrim("website_url")), '#.*$', ''), '^https?://', ''), '^www\.', ''), '/+$', '')
+        else regexp_replace(regexp_replace(regexp_replace(lower(btrim("website_url")), '#.*$', ''), '^https?://', ''), '^www\.', '')
+      end
+    `),
+    industry: varchar('industry', { length: 255 }),
+    description: text('description'),
+    country: varchar('country', { length: 100 }),
+    city: varchar('city', { length: 100 }),
+    serviceArea: text('service_area'),
+    primaryGoal: text('primary_goal'),
+    timezone: varchar('timezone', { length: 100 }).default('UTC'),
+    dataStale: boolean('data_stale').default(false).notNull(),
+    lastAnalyzedAt: timestamp('last_analyzed_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({
+    // Race-proof duplicate guard: one row per website per workspace. The
+    // application-level 409 in routes/businesses.ts only covers sequential
+    // requests; this covers concurrent ones.
+    wsNormalizedUrlUniq: uniqueIndex('businesses_workspace_normalized_url_uniq').on(
+      t.workspaceId,
+      t.normalizedUrl
+    ),
+  })
+);
 
 // 4. Business Locations
 export const businessLocations = pgTable('business_locations', {

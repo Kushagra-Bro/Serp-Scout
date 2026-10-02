@@ -8,6 +8,7 @@ import {
   services,
 } from '../db/index.js';
 import { WorkspaceRequest } from '../middleware/workspace.js';
+import { isSameWebsiteUrl } from '../lib/website-url.js';
 import { websiteAnalysisQueue } from '../jobs/queues.js';
 
 import { env } from '../config/env.js';
@@ -152,6 +153,26 @@ const createBusinessSchema = z.object({
 
 const updateBusinessSchema = createBusinessSchema.partial();
 
+/**
+ * True when Postgres rejected the write because the unique index on
+ * (workspace_id, normalized_url) already holds that website.
+ *
+ * Matches on the constraint name so an unrelated unique violation (e.g. a
+ * future PK clash) still surfaces as a 500 instead of a misleading 409.
+ */
+function isDuplicateWebsiteError(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false;
+  const e = err as { code?: string; constraint?: string; cause?: { code?: string; constraint?: string } };
+  const code = e.code ?? e.cause?.code;
+  const constraint = e.constraint ?? e.cause?.constraint;
+  if (code === '23505' && constraint === 'businesses_workspace_normalized_url_uniq') return true;
+  // Driver may wrap the original without propagating the constraint name.
+  if (code === '23505' && typeof (err as Error).message === 'string') {
+    return (err as Error).message.includes('businesses_workspace_normalized_url_uniq');
+  }
+  return false;
+}
+
 // POST /api/businesses - Create a business in active workspace
 router.post('/', async (req: WorkspaceRequest, res: Response): Promise<void> => {
   const workspace = req.workspace;
@@ -172,6 +193,34 @@ router.post('/', async (req: WorkspaceRequest, res: Response): Promise<void> => 
   const data = parseResult.data;
 
   try {
+    // Duplicate guard: the same website added twice would double the SerpApi
+    // quota spend and schedule two identical research runs. Compare on the
+    // normalized host so `https://Example.com/` and `www.example.com` match.
+    const existingBusinesses = await db
+      .select()
+      .from(businesses)
+      .where(eq(businesses.workspaceId, workspace.id));
+
+    const duplicate = existingBusinesses.find((biz) =>
+      isSameWebsiteUrl(biz.websiteUrl, data.websiteUrl)
+    );
+
+    if (duplicate) {
+      res.status(409).json({
+        success: false,
+        error: {
+          code: 'DUPLICATE_WEBSITE',
+          message: `"${duplicate.name}" is already being monitored at ${duplicate.websiteUrl} in this workspace.`,
+        },
+        data: {
+          existingBusinessId: duplicate.id,
+          existingBusinessName: duplicate.name,
+          existingWebsiteUrl: duplicate.websiteUrl,
+        },
+      });
+      return;
+    }
+
     const [newBusiness] = await db
       .insert(businesses)
       .values({
@@ -232,6 +281,38 @@ router.post('/', async (req: WorkspaceRequest, res: Response): Promise<void> => 
       },
     });
   } catch (err) {
+    // A concurrent request can win the race between the SELECT above and this
+    // INSERT; the unique index then rejects it. Surface that as a 409 rather
+    // than a 500 so the client sees the same answer as the sequential case.
+    if (isDuplicateWebsiteError(err)) {
+      const existing = await db
+        .select()
+        .from(businesses)
+        .where(eq(businesses.workspaceId, workspace.id))
+        .then((rows) =>
+          rows.find((biz) => isSameWebsiteUrl(biz.websiteUrl, data.websiteUrl))
+        )
+        .catch(() => undefined);
+
+      res.status(409).json({
+        success: false,
+        error: {
+          code: 'DUPLICATE_WEBSITE',
+          message: existing
+            ? `"${existing.name}" is already being monitored at ${existing.websiteUrl} in this workspace.`
+            : 'This website is already being monitored in this workspace.',
+        },
+        data: existing
+          ? {
+              existingBusinessId: existing.id,
+              existingBusinessName: existing.name,
+              existingWebsiteUrl: existing.websiteUrl,
+            }
+          : undefined,
+      });
+      return;
+    }
+
     console.error('Failed to create business:', err);
     res.status(500).json({
       success: false,
@@ -331,6 +412,49 @@ router.patch('/:id', async (req: WorkspaceRequest, res: Response): Promise<void>
   const data = parseResult.data;
 
   try {
+    // Existence first: a PATCH to a business that isn't here must 404, even if
+    // the requested URL happens to collide with a sibling.
+    const target = await db
+      .select()
+      .from(businesses)
+      .where(and(eq(businesses.id, businessId), eq(businesses.workspaceId, workspace!.id)))
+      .limit(1);
+
+    if (target.length === 0) {
+      res.status(404).json({
+        success: false,
+        error: { code: 'NOT_FOUND', message: 'Business not found' },
+      });
+      return;
+    }
+
+    // Reject retargeting a business onto a website another business already owns.
+    if (data.websiteUrl) {
+      const allInWorkspace = await db
+        .select()
+        .from(businesses)
+        .where(eq(businesses.workspaceId, workspace!.id));
+
+      const conflict = allInWorkspace.find(
+        (biz) => biz.id !== businessId && isSameWebsiteUrl(biz.websiteUrl, data.websiteUrl!)
+      );
+
+      if (conflict) {
+        res.status(409).json({
+          success: false,
+          error: {
+            code: 'DUPLICATE_WEBSITE',
+            message: `"${conflict.name}" is already monitoring ${conflict.websiteUrl} in this workspace.`,
+          },
+          data: {
+            existingBusinessId: conflict.id,
+            existingBusinessName: conflict.name,
+          },
+        });
+        return;
+      }
+    }
+
     const [updated] = await db
       .update(businesses)
       .set({
@@ -361,6 +485,35 @@ router.patch('/:id', async (req: WorkspaceRequest, res: Response): Promise<void>
       data: updated,
     });
   } catch (err) {
+    // Same race as POST: another request claimed the URL between our SELECT
+    // and this UPDATE. Return 409 rather than 500.
+    if (isDuplicateWebsiteError(err)) {
+      const conflict = await db
+        .select()
+        .from(businesses)
+        .where(eq(businesses.workspaceId, workspace!.id))
+        .then((rows) =>
+          rows.find(
+            (biz) => biz.id !== businessId && isSameWebsiteUrl(biz.websiteUrl, data.websiteUrl!)
+          )
+        )
+        .catch(() => undefined);
+
+      res.status(409).json({
+        success: false,
+        error: {
+          code: 'DUPLICATE_WEBSITE',
+          message: conflict
+            ? `"${conflict.name}" is already monitoring ${conflict.websiteUrl} in this workspace.`
+            : 'This website is already being monitored in this workspace.',
+        },
+        data: conflict
+          ? { existingBusinessId: conflict.id, existingBusinessName: conflict.name }
+          : undefined,
+      });
+      return;
+    }
+
     console.error('Failed to update business:', err);
     res.status(500).json({
       success: false,

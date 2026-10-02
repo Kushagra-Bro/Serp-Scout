@@ -49,7 +49,11 @@ export async function apiClient<T>(endpoint: string, options: FetchOptions = {})
 
   if (!res.ok || !data.success) {
     const message = data.error?.message || `Request failed with status ${res.status}`;
-    throw new Error(message);
+    // Carry status/code so callers can branch (e.g. duplicate website -> 409).
+    const err = new Error(message) as Error & { status?: number; code?: string };
+    err.status = res.status;
+    err.code = data.error?.code;
+    throw err;
   }
 
   return data.data as T;
