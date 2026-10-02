@@ -45,3 +45,6 @@ Thumbs.db
 # ─── Misc ─────────────────────────────────────
 *.tsbuildinfo
 .vercel
+
+.vercel
+.env*
