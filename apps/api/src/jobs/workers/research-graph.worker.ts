@@ -305,6 +305,7 @@ export function startResearchGraphWorker() {
       connection: redisConnection,
       // The pipeline is fan-out heavy and makes many upstream calls.
       concurrency: 1,
+      lockDuration: 300000, // 5 minutes for deep graph analysis
     }
   );
 

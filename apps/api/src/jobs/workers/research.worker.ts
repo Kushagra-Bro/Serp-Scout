@@ -174,6 +174,7 @@ export function startWebsiteAnalysisWorker() {
     {
       connection: redisConnection,
       concurrency: 3,
+      lockDuration: 300000, // 5 minutes
     }
   );
 
@@ -197,6 +198,7 @@ export function startResearchWorker() {
     {
       connection: redisConnection,
       concurrency: 2,
+      lockDuration: 300000, // 5 minutes to allow multiple SerpApi & LLM calls
     }
   );
 
