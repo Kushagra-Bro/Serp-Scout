@@ -1,4 +1,4 @@
-import { Worker, Job } from 'bullmq';
+import { Worker, Job, UnrecoverableError } from 'bullmq';
 import { and, eq } from 'drizzle-orm';
 import {
   db,
@@ -19,6 +19,7 @@ import {
 } from '../../services/research-gateway.service.js';
 import { redisConnection } from '../queues.js';
 import { env } from '../../config/env.js';
+import { classifySearchError } from '../../lib/search-errors.js';
 
 export interface ResearchGraphJobData {
   businessId: string;
@@ -299,7 +300,18 @@ export function startResearchGraphWorker() {
   const worker = new Worker<ResearchGraphJobData>(
     'research-graph',
     async (job: Job<ResearchGraphJobData>) => {
-      return await executeResearchGraphRun(job.data);
+      try {
+        return await executeResearchGraphRun(job.data);
+      } catch (err: any) {
+        // Quota failures tell us nothing will change by retrying (the meter or
+        // upstream credits reset on a month boundary, not on a backoff timer),
+        // so fail the job once instead of burning `attempts: 3` + exponential
+        // backoff on every scheduled cycle.
+        if (classifySearchError(err) !== 'other') {
+          throw new UnrecoverableError(err?.message || String(err));
+        }
+        throw err;
+      }
     },
     {
       connection: redisConnection,

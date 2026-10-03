@@ -5,6 +5,7 @@ import { db, businesses, competitors, contentGaps, reports, recommendations } fr
 import { WorkspaceRequest } from '../middleware/workspace.js';
 import { researchGraphQueue } from '../jobs/queues.js';
 import { executeResearchGraphRun } from '../jobs/workers/research-graph.worker.js';
+import { classifySearchError, providerNameFromError } from '../lib/search-errors.js';
 
 const router = Router();
 
@@ -76,12 +77,36 @@ router.post(
       });
     } catch (err: any) {
       console.error(`Research graph run failed for ${businessId}:`, err);
-      const quotaHit = /quota/i.test(err?.message || '');
-      res.status(quotaHit ? 429 : 500).json({
+      const kind = classifySearchError(err);
+      const workspaceQuotaOut = kind === 'workspace-quota';
+      const providerOut = kind === 'provider-quota';
+      const provider = providerNameFromError(err);
+      const status = workspaceQuotaOut || providerOut ? 429 : 500;
+
+      let message: string;
+      if (providerOut) {
+        message =
+          provider === 'Tavily'
+            ? 'Tavily is out of quota for this account. SERP sweeps still run on SerpApi — retry now or after the provider resets its monthly cycle.'
+            : provider === 'SerpApi'
+            ? 'SerpApi is out of quota for this account. Organic sweeps can still run on Tavily — retry now or after the provider resets its monthly cycle.'
+            : 'The search provider is out of quota. Retry after the provider resets its monthly cycle.';
+      } else if (workspaceQuotaOut) {
+        message = `Monthly search quota exceeded. ${err.message || 'Please upgrade or wait for the monthly reset.'}`;
+      } else {
+        message = err.message || 'Failed to run the research pipeline';
+      }
+
+      if (workspaceQuotaOut) res.set('Retry-After', '86400');
+      res.status(status).json({
         success: false,
         error: {
-          code: quotaHit ? 'QUOTA_EXCEEDED' : 'RESEARCH_RUN_FAILED',
-          message: err.message || 'Failed to run the research pipeline',
+          code: workspaceQuotaOut
+            ? 'QUOTA_EXCEEDED'
+            : providerOut
+            ? 'PROVIDER_QUOTA_EXCEEDED'
+            : 'RESEARCH_RUN_FAILED',
+          message,
         },
       });
     }

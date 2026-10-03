@@ -4,6 +4,7 @@ import { db, businesses, services, keywords, workspaces, rankingObservations } f
 import { analyzeWebsite } from '@serp-scout/agents';
 import { redisConnection, reportQueue } from '../queues.js';
 import { refreshKeywordRankings } from '../../services/ranking.service.js';
+import { classifySearchError } from '../../lib/search-errors.js';
 
 export interface WebsiteAnalysisJobData {
   businessId: string;
@@ -37,6 +38,7 @@ export async function executeResearchRun(data: ResearchRunJobData) {
   // 2. Refresh keyword rankings & record observations
   console.log(`[ResearchWorker] Refreshing keyword rankings for business ${business.name}...`);
   let observationsRecorded = 0;
+  let quotaExhausted = false;
   try {
     const refreshResult = await refreshKeywordRankings({
       businessId,
@@ -45,19 +47,40 @@ export async function executeResearchRun(data: ResearchRunJobData) {
     });
     observationsRecorded = refreshResult.refreshedCount;
   } catch (err: any) {
-    console.warn('[ResearchWorker] Warning during ranking refresh:', err.message);
+    if (classifySearchError(err) !== 'other') {
+      // Workspace meter or upstream provider is out of quota: don't retry here,
+      // don't fabricate freshness, and don't build reports on stale data. The
+      // monthly reset (or the cross-provider fallback now baked into
+      // executeSearchRun) resolves this on a future cycle.
+      quotaExhausted = true;
+      console.warn(`[ResearchWorker] Skipped ranking refresh for "${business.name}": ${err.message}`);
+    } else {
+      console.warn('[ResearchWorker] Warning during ranking refresh:', err.message);
+    }
   }
 
-  // 3. Mark business as fresh
+  // 3. Mark business as fresh — unless a search quota was exhausted. In that
+  // case leave lastAnalyzedAt untouched (so the cadence clock keeps running)
+  // and flag the data stale so the catch-up re-runs it after the reset.
   const now = new Date();
-  await db
-    .update(businesses)
-    .set({
-      lastAnalyzedAt: now,
-      dataStale: false,
-      updatedAt: now,
-    })
-    .where(eq(businesses.id, businessId));
+  if (quotaExhausted) {
+    await db
+      .update(businesses)
+      .set({
+        dataStale: true,
+        updatedAt: now,
+      })
+      .where(eq(businesses.id, businessId));
+  } else {
+    await db
+      .update(businesses)
+      .set({
+        lastAnalyzedAt: now,
+        dataStale: false,
+        updatedAt: now,
+      })
+      .where(eq(businesses.id, businessId));
+  }
 
   // 4. Update workspace last scheduled run
   await db
@@ -68,9 +91,9 @@ export async function executeResearchRun(data: ResearchRunJobData) {
     })
     .where(eq(workspaces.id, workspaceId));
 
-  // 5. Trigger weekly report generation if requested
+  // 5. Trigger weekly report generation if requested (not on a quota-exhausted run)
   let reportJobId: string | null = null;
-  if (triggerReport) {
+  if (triggerReport && !quotaExhausted) {
     console.log(`[ResearchWorker] Research run complete. Enqueueing weekly report generation...`);
     const reportJob = await reportQueue.add('generate-report', {
       businessId,

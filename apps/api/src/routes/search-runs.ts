@@ -7,6 +7,7 @@ import {
   listSearchRunsForBusiness,
   getSearchRunDetails,
 } from '../services/search-run.service.js';
+import { classifySearchError, providerNameFromError } from '../lib/search-errors.js';
 
 const router = Router();
 
@@ -62,11 +63,24 @@ router.post(
       });
     } catch (err: any) {
       console.error(`Search run failed for business ${businessId}:`, err);
-      res.status(500).json({
+      const kind = classifySearchError(err);
+      const quota = kind === 'workspace-quota';
+      const providerOut = kind === 'provider-quota';
+      const status = quota || providerOut ? 429 : 500;
+      const provider = providerNameFromError(err);
+
+      if (quota) res.set('Retry-After', '86400');
+      res.status(status).json({
         success: false,
         error: {
-          code: 'SEARCH_FAILED',
-          message: err.message || 'Search execution failed',
+          code: quota
+            ? 'QUOTA_EXCEEDED'
+            : providerOut
+            ? 'PROVIDER_QUOTA_EXCEEDED'
+            : 'SEARCH_FAILED',
+          message: providerOut
+            ? `${provider} is out of quota for this account. Retry after the provider resets its monthly cycle.`
+            : err.message || 'Search execution failed',
         },
       });
     }

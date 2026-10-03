@@ -1,6 +1,7 @@
 import { researchQueue, staleQueue, redisConnection } from './queues.js';
 import { db, workspaces, businesses } from '../db/index.js';
 import { eq } from 'drizzle-orm';
+import { scheduleQuotaReset } from './quota-reset.js';
 
 export const CADENCE_CRON_PATTERNS: Record<string, string> = {
   daily: '0 6 * * *',      // Daily at 06:00 UTC
@@ -162,6 +163,7 @@ export async function syncAllWorkspaceSchedules(): Promise<void> {
   try {
     await scheduleStaleCheck();
     await scheduleCatchUp();
+    await scheduleQuotaReset();
 
     const allWorkspaces = await db.select().from(workspaces);
     for (const ws of allWorkspaces) {

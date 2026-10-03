@@ -12,6 +12,8 @@ import {
   searchGoogleNews,
 } from '@serp-scout/serpapi';
 import type { ResearchSearchGateway } from '@serp-scout/agents';
+import type { NormalizedSearchResult, NormalizedNewsResult } from '@serp-scout/types';
+import { searchTavily } from './tavily.service.js';
 import { env } from '../config/env.js';
 
 /**
@@ -48,17 +50,18 @@ export class SerpApiResearchGateway implements ResearchSearchGateway {
 
   private async createRun(
     searchType: 'google' | 'google_maps' | 'google_news',
-    query: string
+    query: string,
+    provider: 'serpapi' | 'tavily' = 'serpapi'
   ): Promise<string> {
     const [run] = await db
       .insert(searchRuns)
       .values({
         businessId: this.businessId,
-        provider: 'serpapi',
+        provider,
         searchType,
         query,
         location: this.location,
-        costUnits: 1,
+        costUnits: provider === 'tavily' ? 0 : 1,
         status: 'pending',
       })
       .returning();
@@ -67,7 +70,8 @@ export class SerpApiResearchGateway implements ResearchSearchGateway {
 
   private async completeRun(
     runId: string,
-    rows: Array<Record<string, any>>
+    rows: Array<Record<string, any>>,
+    provider: 'serpapi' | 'tavily' = 'serpapi'
   ): Promise<void> {
     if (rows.length > 0) {
       await db.insert(searchResults).values(
@@ -90,16 +94,24 @@ export class SerpApiResearchGateway implements ResearchSearchGateway {
 
     await db
       .update(searchRuns)
-      .set({ status: 'completed', completedAt: new Date() })
+      .set({
+        status: 'completed',
+        provider,
+        costUnits: provider === 'tavily' ? 0 : 1,
+        completedAt: new Date(),
+      })
       .where(eq(searchRuns.id, runId));
 
-    await db
-      .update(workspaces)
-      .set({
-        usedQuota: sql`${workspaces.usedQuota} + 1`,
-        updatedAt: new Date(),
-      })
-      .where(eq(workspaces.id, this.workspaceId));
+    // Only paid SerpApi searches consume workspace meter units.
+    if (provider !== 'tavily') {
+      await db
+        .update(workspaces)
+        .set({
+          usedQuota: sql`${workspaces.usedQuota} + 1`,
+          updatedAt: new Date(),
+        })
+        .where(eq(workspaces.id, this.workspaceId));
+    }
   }
 
   private async failRun(runId: string, err: unknown): Promise<void> {
@@ -113,6 +125,77 @@ export class SerpApiResearchGateway implements ResearchSearchGateway {
       .where(eq(searchRuns.id, runId));
   }
 
+  /**
+   * Runs a SerpApi organic/news search, falling back to Tavily when SerpApi is
+   * out of credits or hard rate-limited, so a single provider outage does not
+   * take down the whole research pipeline. Tavily output is normalized into the
+   * same result shapes the graph consumes.
+   */
+  private async searchOrganicOrNewsWithFallback(
+    searchType: 'google' | 'google_news',
+    query: string,
+    opts?: { location?: string }
+  ): Promise<{
+    results: NormalizedSearchResult[] | NormalizedNewsResult[];
+    provider: 'serpapi' | 'tavily';
+    paaQuestions: string[];
+  }> {
+    try {
+      const resp =
+        searchType === 'google'
+          ? await searchGoogle(
+              { query, location: opts?.location || this.location },
+              env.SERPAPI_KEY
+            )
+          : await searchGoogleNews({ query }, env.SERPAPI_KEY);
+      return {
+        results: resp.results,
+        provider: 'serpapi',
+        paaQuestions: searchType === 'google' ? (resp as any).paaQuestions ?? [] : [],
+      };
+    } catch (serpErr: any) {
+      if (!env.TAVILY_API_KEY) throw serpErr;
+
+      let tavilyResults: Awaited<ReturnType<typeof searchTavily>>;
+      try {
+        tavilyResults = await searchTavily({
+          query,
+          apiKey: env.TAVILY_API_KEY,
+          num: 15,
+        });
+      } catch {
+        // Both providers failed — surface the original SerpApi error.
+        throw serpErr;
+      }
+
+      console.warn(
+        `[SerpApiResearchGateway] ${searchType} via SerpApi failed (${serpErr?.message ?? serpErr}); serving from Tavily.`
+      );
+
+      const results: NormalizedSearchResult[] | NormalizedNewsResult[] =
+        searchType === 'google'
+          ? (tavilyResults.map((r) => ({
+              rank: r.rank,
+              title: r.title ?? '',
+              url: r.url ?? '',
+              domain: r.domain ?? '',
+              snippet: r.snippet ?? '',
+              serpFeatures: ['tavily_web'],
+              raw: r.raw,
+            })) as NormalizedSearchResult[])
+          : (tavilyResults.map((r) => ({
+              rank: r.rank,
+              title: r.title ?? '',
+              source: r.domain || r.url || 'news',
+              link: r.url ?? '',
+              snippet: r.snippet ?? '',
+              raw: r.raw,
+            })) as NormalizedNewsResult[]);
+
+      return { results, provider: 'tavily', paaQuestions: [] };
+    }
+  }
+
   async searchOrganic(
     query: string,
     opts?: { location?: string }
@@ -122,13 +205,11 @@ export class SerpApiResearchGateway implements ResearchSearchGateway {
   }> {
     const runId = await this.createRun('google', query);
     try {
-      const resp = await searchGoogle(
-        { query, location: opts?.location || this.location },
-        env.SERPAPI_KEY
-      );
+      const { results, provider, paaQuestions } = await this.searchOrganicOrNewsWithFallback('google', query, opts);
+      const typed = results as NormalizedSearchResult[];
       await this.completeRun(
         runId,
-        resp.results.map((r) => ({
+        typed.map((r) => ({
           resultType: 'organic',
           rank: r.rank,
           title: r.title,
@@ -137,9 +218,10 @@ export class SerpApiResearchGateway implements ResearchSearchGateway {
           businessName: r.title,
           snippet: r.snippet,
           rawReference: r.raw,
-        }))
+        })),
+        provider
       );
-      return { results: resp.results, paaQuestions: resp.paaQuestions };
+      return { results: typed, paaQuestions };
     } catch (err) {
       await this.failRun(runId, err);
       throw err;
@@ -183,10 +265,11 @@ export class SerpApiResearchGateway implements ResearchSearchGateway {
   }> {
     const runId = await this.createRun('google_news', query);
     try {
-      const resp = await searchGoogleNews({ query }, env.SERPAPI_KEY);
+      const { results, provider } = await this.searchOrganicOrNewsWithFallback('google_news', query);
+      const typed = results as NormalizedNewsResult[];
       await this.completeRun(
         runId,
-        resp.results.map((n) => ({
+        typed.map((n) => ({
           resultType: 'news',
           rank: n.rank,
           title: n.title,
@@ -195,9 +278,10 @@ export class SerpApiResearchGateway implements ResearchSearchGateway {
           businessName: n.source,
           snippet: n.snippet,
           rawReference: n.raw,
-        }))
+        })),
+        provider
       );
-      return { results: resp.results };
+      return { results: typed };
     } catch (err) {
       await this.failRun(runId, err);
       throw err;

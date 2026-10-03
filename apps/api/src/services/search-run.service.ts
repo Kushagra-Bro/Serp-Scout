@@ -131,74 +131,80 @@ export async function executeSearchRun(options: ExecuteSearchOptions) {
     let rawResults: any[] = [];
     const searchLocation = location || business.city || undefined;
 
-    // 4. Dispatch search to Tavily (zero SerpApi tokens used)
-    if (actualProvider === 'tavily' && env.TAVILY_API_KEY) {
-      const tavilyQuery = searchLocation && !query.toLowerCase().includes(searchLocation.toLowerCase())
-        ? `${query} ${searchLocation}`
-        : query;
+    // Executes a single search against one concrete provider. Maps is always
+    // SerpApi (Tavily has no Maps engine); organic/news can ride on either.
+    const searchWithProvider = async (provider: 'serpapi' | 'tavily'): Promise<any[]> => {
+      if (provider === 'tavily' && env.TAVILY_API_KEY) {
+        const tavilyQuery = searchLocation && !query.toLowerCase().includes(searchLocation.toLowerCase())
+          ? `${query} ${searchLocation}`
+          : query;
 
-      const tavilyResults = await searchTavily({
-        query: tavilyQuery,
-        apiKey: env.TAVILY_API_KEY,
-        num,
-      });
+        const tavilyResults = await searchTavily({
+          query: tavilyQuery,
+          apiKey: env.TAVILY_API_KEY,
+          num,
+        });
 
-      rawResults = tavilyResults.map((r) => ({
-        resultType: 'organic',
-        rank: r.rank,
-        title: r.title,
-        url: r.url,
-        domain: r.domain,
-        businessName: r.title,
-        snippet: r.snippet,
-        serpFeatures: ['tavily_web'],
-        rawReference: r.raw,
-      }));
-    } else if (searchType === 'google') {
-      // Dispatch search to SerpApi
-      const resp = await searchGoogle(
-        { query, location: searchLocation, language, country: resolvedCountry, device, num },
-        env.SERPAPI_KEY
-      );
-      rawResults = resp.results.map((r) => ({
-        resultType: 'organic',
-        rank: r.rank,
-        title: r.title,
-        url: r.url,
-        domain: r.domain,
-        businessName: r.title,
-        snippet: r.snippet,
-        serpFeatures: r.serpFeatures,
-        rawReference: r.raw,
-      }));
-    } else if (searchType === 'google_maps') {
-      const mapsQuery = searchLocation && !query.toLowerCase().includes(searchLocation.toLowerCase())
-        ? `${query} in ${searchLocation}`
-        : query;
+        return tavilyResults.map((r) => ({
+          resultType: 'organic',
+          rank: r.rank,
+          title: r.title,
+          url: r.url,
+          domain: r.domain,
+          businessName: r.title,
+          snippet: r.snippet,
+          serpFeatures: ['tavily_web'],
+          rawReference: r.raw,
+        }));
+      }
 
-      const resp = await searchGoogleMaps(
-        { query: mapsQuery, location: searchLocation, language },
-        env.SERPAPI_KEY
-      );
-      rawResults = resp.results.map((m) => ({
-        resultType: 'maps',
-        rank: m.rank,
-        title: m.title,
-        url: m.website || m.raw?.link || '',
-        domain: m.website ? new URL(m.website).hostname.replace(/^www\./, '') : '',
-        businessName: m.title,
-        snippet: m.address,
-        rating: m.rating ? String(m.rating) : undefined,
-        reviewCount: m.reviewsCount,
-        locationText: m.address,
-        rawReference: m.raw,
-      }));
-    } else if (searchType === 'google_news') {
+      if (searchType === 'google') {
+        const resp = await searchGoogle(
+          { query, location: searchLocation, language, country: resolvedCountry, device, num },
+          env.SERPAPI_KEY
+        );
+        return resp.results.map((r) => ({
+          resultType: 'organic',
+          rank: r.rank,
+          title: r.title,
+          url: r.url,
+          domain: r.domain,
+          businessName: r.title,
+          snippet: r.snippet,
+          serpFeatures: r.serpFeatures,
+          rawReference: r.raw,
+        }));
+      }
+
+      if (searchType === 'google_maps') {
+        const mapsQuery = searchLocation && !query.toLowerCase().includes(searchLocation.toLowerCase())
+          ? `${query} in ${searchLocation}`
+          : query;
+
+        const resp = await searchGoogleMaps(
+          { query: mapsQuery, location: searchLocation, language },
+          env.SERPAPI_KEY
+        );
+        return resp.results.map((m) => ({
+          resultType: 'maps',
+          rank: m.rank,
+          title: m.title,
+          url: m.website || m.raw?.link || '',
+          domain: m.website ? new URL(m.website).hostname.replace(/^www\./, '') : '',
+          businessName: m.title,
+          snippet: m.address,
+          rating: m.rating ? String(m.rating) : undefined,
+          reviewCount: m.reviewsCount,
+          locationText: m.address,
+          rawReference: m.raw,
+        }));
+      }
+
       const resp = await searchGoogleNews(
         { query, language, country: resolvedCountry },
         env.SERPAPI_KEY
       );
-      rawResults = resp.results.map((n) => ({
+      return resp.results.map((n) => ({
         resultType: 'news',
         rank: n.rank,
         title: n.title,
@@ -208,6 +214,38 @@ export async function executeSearchRun(options: ExecuteSearchOptions) {
         snippet: n.snippet,
         rawReference: n.raw,
       }));
+    };
+
+    // Cross-provider fallback: one provider being out of credits or hard
+    // rate-limited must not take down every organic/news sweep. Retry once on
+    // the other engine. Falling back onto SerpApi is only allowed while the
+    // workspace meter still has room; falling back onto Tavily is always free.
+    let finalProvider: 'serpapi' | 'tavily' = actualProvider;
+    try {
+      rawResults = await searchWithProvider(actualProvider);
+    } catch (firstErr: any) {
+      const fallback: 'serpapi' | 'tavily' =
+        actualProvider === 'tavily' ? 'serpapi' : 'tavily';
+      const fallbackAllowed =
+        searchType !== 'google_maps' &&
+        (actualProvider === 'tavily'
+          ? workspace.usedQuota < workspace.monthlyQuota
+          : Boolean(env.TAVILY_API_KEY));
+
+      if (!fallbackAllowed) throw firstErr;
+
+      console.warn(
+        `[SearchRunService] ${actualProvider} search failed (${firstErr?.message ?? firstErr}); ` +
+          `falling back to ${fallback}.`
+      );
+      try {
+        rawResults = await searchWithProvider(fallback);
+        finalProvider = fallback;
+      } catch (secondErr) {
+        // Surface the primary provider's error; it is usually the more
+        // actionable one for the user.
+        throw firstErr;
+      }
     }
 
     // 5. Persist normalized results
@@ -230,22 +268,25 @@ export async function executeSearchRun(options: ExecuteSearchOptions) {
       );
     }
 
-    // 6. Update search run status to 'completed'
+    // 6. Update search run status to 'completed' (record which provider really served)
+    const finalCostUnits = finalProvider === 'tavily' ? 0 : 1;
     const [completedRun] = await db
       .update(searchRuns)
       .set({
         status: 'completed',
+        provider: finalProvider,
+        costUnits: finalCostUnits,
         completedAt: new Date(),
       })
       .where(eq(searchRuns.id, run.id))
       .returning();
 
-    // 7. Increment workspace quota count atomically (only for paid providers like SerpApi)
-    if (costUnits > 0) {
+    // 7. Increment workspace quota count atomically (only for paid providers)
+    if (finalCostUnits > 0) {
       await db
         .update(workspaces)
         .set({
-          usedQuota: sql`${workspaces.usedQuota} + ${costUnits}`,
+          usedQuota: sql`${workspaces.usedQuota} + ${finalCostUnits}`,
           updatedAt: new Date(),
         })
         .where(eq(workspaces.id, workspaceId));
