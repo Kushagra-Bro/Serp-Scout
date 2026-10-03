@@ -99,6 +99,10 @@ export function startStaleCheckWorker() {
     {
       connection: redisConnection,
       concurrency: 2,
+      stalledInterval: 10 * 60 * 1000,
+      maxStalledCount: 2,
+      // Stale-check + catch-up + quota-reset all run on long repeating windows;
+      // keep the queue scan rate low to protect the Redis request budget.
     }
   );
 

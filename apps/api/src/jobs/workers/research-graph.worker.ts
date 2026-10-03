@@ -318,6 +318,8 @@ export function startResearchGraphWorker() {
       // The pipeline is fan-out heavy and makes many upstream calls.
       concurrency: 1,
       lockDuration: 300000, // 5 minutes for deep graph analysis
+      stalledInterval: 10 * 60 * 1000,
+      maxStalledCount: 2,
     }
   );
 

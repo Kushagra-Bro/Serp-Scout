@@ -251,6 +251,8 @@ export function startReportWorker() {
       connection: redisConnection,
       concurrency: 2,
       lockDuration: 300000, // 5 minutes to generate PDF and LLM report
+      stalledInterval: 10 * 60 * 1000,
+      maxStalledCount: 2,
     }
   );
 

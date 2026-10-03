@@ -198,6 +198,12 @@ export function startWebsiteAnalysisWorker() {
       connection: redisConnection,
       concurrency: 3,
       lockDuration: 300000, // 5 minutes
+      // Reduce passive Redis churn: Upstash meters every request, and BullMQ's
+      // default 30s stalled-scan per worker is the dominant always-on cost.
+      // 10 min is plenty for this app's hourly/weekly cadence (Postgres-based
+      // catch-up converges even if a scan is missed).
+      stalledInterval: 10 * 60 * 1000,
+      maxStalledCount: 2,
     }
   );
 
@@ -222,6 +228,8 @@ export function startResearchWorker() {
       connection: redisConnection,
       concurrency: 2,
       lockDuration: 300000, // 5 minutes to allow multiple SerpApi & LLM calls
+      stalledInterval: 10 * 60 * 1000,
+      maxStalledCount: 2,
     }
   );
 
