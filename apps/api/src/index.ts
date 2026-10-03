@@ -14,16 +14,11 @@ import analysisRouter from './routes/analysis.js';
 import researchGraphRouter from './routes/research-graph.js';
 import reportsRouter, { sharedReportsRouter } from './routes/reports.js';
 import schedulesRouter from './routes/schedules.js';
-import {
-  startWebsiteAnalysisWorker,
-  startResearchWorker,
-} from './jobs/workers/research.worker.js';
-import { startReportWorker } from './jobs/workers/report.worker.js';
-import { startResearchGraphWorker } from './jobs/workers/research-graph.worker.js';
+import { startMainJobWorker } from './jobs/workers/main.worker.js';
 import { startSystemTimers } from './jobs/system-timers.js';
 import { syncAllWorkspaceSchedules } from './jobs/scheduler.js';
 import { runCatchUpReconciliation } from './jobs/catchup.js';
-import { allQueues, redisConnection } from './jobs/queues.js';
+import { allQueues, redisConnection, getRedisStats } from './jobs/queues.js';
 import { createGracefulShutdown } from './graceful-shutdown.js';
 
 const app = express();
@@ -42,6 +37,7 @@ app.get('/health', (_req, res) => {
     status: 'ok',
     service: 'serp-scout-api',
     environment: env.NODE_ENV,
+    redis: getRedisStats(),
     timestamp: new Date().toISOString(),
   });
 });
@@ -90,17 +86,13 @@ app.use('/api/searches', requireAuthenticatedUser, requireWorkspace, searchRunsR
 // Protected Job Polling Routes
 app.use('/api/jobs', requireAuthenticatedUser, jobsRouter);
 
-// Start BullMQ Workers and in-process background timers in non-test environments.
-// Recurring work no longer uses BullMQ repeatables (they forced standing 10s
-// blocking polls per queue against the Upstash request budget): cadence is
-// enforced by the Postgres-driven catch-up reconciler via an in-process timer.
+// Start BullMQ Unified Worker and in-process background timers in non-test environments.
+// All tasks run on the unified serp-scout-jobs queue to stay well within the
+// 500k monthly Upstash request quota.
 const workers: Array<{ close(): Promise<unknown> }> = [];
 if (env.NODE_ENV !== 'test') {
   workers.push(
-    startWebsiteAnalysisWorker(),
-    startResearchWorker(),
-    startReportWorker(),
-    startResearchGraphWorker(),
+    startMainJobWorker(),
     startSystemTimers()
   );
   // Purge repeatables left over from the earlier BullMQ-based scheduler, then

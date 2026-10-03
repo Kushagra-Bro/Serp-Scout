@@ -110,141 +110,99 @@ export async function executeResearchRun(data: ResearchRunJobData) {
   };
 }
 
-export function startWebsiteAnalysisWorker() {
-  const worker = new Worker<WebsiteAnalysisJobData>(
-    'website-analysis',
-    async (job: Job<WebsiteAnalysisJobData>) => {
-      const { businessId } = job.data;
-      console.log(`[Worker] Starting website analysis for businessId: ${businessId}`);
+/**
+ * Executes a full website analysis: extracts metadata, services, and candidate keywords.
+ */
+export async function executeWebsiteAnalysis(data: WebsiteAnalysisJobData) {
+  const { businessId } = data;
+  console.log(`[WebsiteAnalysis] Starting website analysis for businessId: ${businessId}`);
 
-      // 1. Fetch business details
-      const [business] = await db
-        .select()
-        .from(businesses)
-        .where(eq(businesses.id, businessId))
-        .limit(1);
+  // 1. Fetch business details
+  const [business] = await db
+    .select()
+    .from(businesses)
+    .where(eq(businesses.id, businessId))
+    .limit(1);
 
-      if (!business) {
-        throw new Error(`Business not found with ID ${businessId}`);
-      }
+  if (!business) {
+    throw new Error(`Business not found with ID ${businessId}`);
+  }
 
-      // 2. Run Website Analysis Agent
-      const analysis = await analyzeWebsite(business.websiteUrl, {
-        businessNameHint: business.name,
-        industryHint: business.industry || undefined,
-        cityHint: business.city || undefined,
-      });
+  // 2. Run Website Analysis Agent
+  const analysis = await analyzeWebsite(business.websiteUrl, {
+    businessNameHint: business.name,
+    industryHint: business.industry || undefined,
+    cityHint: business.city || undefined,
+  });
 
-      console.log(`[Worker] Analysis complete for "${business.name}". Extracted ${analysis.detectedServices.length} services, ${analysis.candidateKeywords.length} keywords.`);
+  console.log(`[WebsiteAnalysis] Analysis complete for "${business.name}". Extracted ${analysis.detectedServices.length} services, ${analysis.candidateKeywords.length} keywords.`);
 
-      // 3. Update business record
-      await db
-        .update(businesses)
-        .set({
-          lastAnalyzedAt: new Date(),
-          dataStale: false,
-          updatedAt: new Date(),
-        })
-        .where(eq(businesses.id, businessId));
+  // 3. Update business record
+  await db
+    .update(businesses)
+    .set({
+      lastAnalyzedAt: new Date(),
+      dataStale: false,
+      updatedAt: new Date(),
+    })
+    .where(eq(businesses.id, businessId));
 
-      // 4. Save newly discovered services
-      if (analysis.detectedServices.length > 0) {
-        const existingServices = await db
-          .select()
-          .from(services)
-          .where(eq(services.businessId, businessId));
+  // 4. Save newly discovered services
+  if (analysis.detectedServices.length > 0) {
+    const existingServices = await db
+      .select()
+      .from(services)
+      .where(eq(services.businessId, businessId));
 
-        const existingNames = new Set(existingServices.map((s) => s.name.toLowerCase()));
-        const newServicesToInsert = analysis.detectedServices
-          .filter((name) => !existingNames.has(name.toLowerCase()))
-          .map((name, idx) => ({
-            businessId,
-            name,
-            priority: existingServices.length + idx + 1,
-          }));
+    const existingNames = new Set(existingServices.map((s) => s.name.toLowerCase()));
+    const newServicesToInsert = analysis.detectedServices
+      .filter((name) => !existingNames.has(name.toLowerCase()))
+      .map((name, idx) => ({
+        businessId,
+        name,
+        priority: existingServices.length + idx + 1,
+      }));
 
-        if (newServicesToInsert.length > 0) {
-          await db.insert(services).values(newServicesToInsert);
-        }
-      }
-
-      // 5. Seed candidate keywords discovered from website
-      if (analysis.candidateKeywords.length > 0) {
-        const existingKeywords = await db
-          .select()
-          .from(keywords)
-          .where(eq(keywords.businessId, businessId));
-
-        const existingPhrases = new Set(existingKeywords.map((k) => k.phrase.toLowerCase()));
-        const newKeywordsToInsert = analysis.candidateKeywords
-          .filter((phrase) => !existingPhrases.has(phrase.toLowerCase()))
-          .map((phrase) => ({
-            businessId,
-            phrase,
-            location: business.city || undefined,
-            intent: 'commercial' as const,
-            status: 'candidate' as const,
-            opportunityScore: 70.0,
-          }));
-
-        if (newKeywordsToInsert.length > 0) {
-          await db.insert(keywords).values(newKeywordsToInsert);
-        }
-      }
-
-      return analysis;
-    },
-    {
-      connection: redisConnection,
-      concurrency: 3,
-      lockDuration: 300000, // 5 minutes
-      // Reduce passive Redis churn: Upstash meters every request, and BullMQ's
-      // default 30s stalled-scan per worker is a dominant always-on cost.
-      // 10 min is plenty for this app's cadence (the Postgres-based reconciler
-      // converges even if a scan is missed).
-      stalledInterval: 10 * 60 * 1000,
-      maxStalledCount: 2,
-      // When the queue is drained, block ~5 minutes before polling again instead
-      // of BullMQ's default 5s — the blocking pop is 1 Redis request per poll,
-      // and no standing repeatables exist anymore (see system-timers.ts).
-      drainDelay: 5 * 60 * 1000,
+    if (newServicesToInsert.length > 0) {
+      await db.insert(services).values(newServicesToInsert);
     }
-  );
+  }
 
-  worker.on('completed', (job) => {
-    console.log(`[WebsiteAnalysisWorker] Job ${job.id} completed successfully`);
-  });
+  // 5. Seed candidate keywords discovered from website
+  if (analysis.candidateKeywords.length > 0) {
+    const existingKeywords = await db
+      .select()
+      .from(keywords)
+      .where(eq(keywords.businessId, businessId));
 
-  worker.on('failed', (job, err) => {
-    console.error(`[WebsiteAnalysisWorker] Job ${job?.id} failed with error:`, err);
-  });
+    const existingPhrases = new Set(existingKeywords.map((k) => k.phrase.toLowerCase()));
+    const newKeywordsToInsert = analysis.candidateKeywords
+      .filter((phrase) => !existingPhrases.has(phrase.toLowerCase()))
+      .map((phrase) => ({
+        businessId,
+        phrase,
+        location: business.city || undefined,
+        intent: 'commercial' as const,
+        status: 'candidate' as const,
+        opportunityScore: 70.0,
+      }));
 
-  return worker;
+    if (newKeywordsToInsert.length > 0) {
+      await db.insert(keywords).values(newKeywordsToInsert);
+    }
+  }
+
+  return analysis;
+}
+
+/**
+ * Legacy starters maintained for backwards compatibility.
+ * All workloads are now managed by startMainJobWorker() in main.worker.ts.
+ */
+export function startWebsiteAnalysisWorker() {
+  return { close: async () => {} };
 }
 
 export function startResearchWorker() {
-  const worker = new Worker<ResearchRunJobData>(
-    'research-run',
-    async (job: Job<ResearchRunJobData>) => {
-      return await executeResearchRun(job.data);
-    },
-    {
-      connection: redisConnection,
-      concurrency: 2,
-      lockDuration: 300000, // 5 minutes to allow multiple SerpApi & LLM calls
-      stalledInterval: 10 * 60 * 1000,
-      maxStalledCount: 2,
-      drainDelay: 5 * 60 * 1000,
-    }
-  );
-
-  worker.on('completed', (job) => {
-    console.log(`[ResearchWorker] Job ${job.id} completed successfully`);
-  });
-
-  worker.on('failed', (job, err) => {
-    console.error(`[ResearchWorker] Job ${job?.id} failed with error:`, err);
-  });
-
-  return worker;
+  return { close: async () => {} };
 }

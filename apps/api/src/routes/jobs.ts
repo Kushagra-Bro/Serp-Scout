@@ -1,23 +1,26 @@
 import { Router, Response } from 'express';
-import { allQueues } from '../jobs/queues.js';
+import { allQueues, mainQueue } from '../jobs/queues.js';
 import { AuthenticatedRequest } from '../middleware/auth.js';
 
 const router = Router();
 
-// GET /api/jobs/:id - Check status of an asynchronous job across all BullMQ queues
+// GET /api/jobs/:id - Check status of an asynchronous job
 router.get('/:id', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   const jobId = String(req.params.id);
 
   try {
-    let job = null;
-    let foundQueue = null;
+    let job = await mainQueue.getJob(jobId);
+    let foundQueue = job ? mainQueue.name : null;
 
-    for (const q of allQueues) {
-      const found = await q.getJob(jobId);
-      if (found) {
-        job = found;
-        foundQueue = q.name;
-        break;
+    if (!job) {
+      for (const q of allQueues) {
+        if (q === mainQueue) continue;
+        const found = await q.getJob(jobId);
+        if (found) {
+          job = found;
+          foundQueue = q.name;
+          break;
+        }
       }
     }
 

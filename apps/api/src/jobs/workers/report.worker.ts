@@ -241,29 +241,10 @@ export async function executeReportGeneration(data: ReportJobData) {
   };
 }
 
+/**
+ * Legacy starter maintained for backwards compatibility.
+ * All workloads are now managed by startMainJobWorker() in main.worker.ts.
+ */
 export function startReportWorker() {
-  const worker = new Worker<ReportJobData>(
-    'weekly-report',
-    async (job: Job<ReportJobData>) => {
-      return await executeReportGeneration(job.data);
-    },
-    {
-      connection: redisConnection,
-      concurrency: 2,
-      lockDuration: 300000, // 5 minutes to generate PDF and LLM report
-      stalledInterval: 10 * 60 * 1000,
-      maxStalledCount: 2,
-      drainDelay: 5 * 60 * 1000,
-    }
-  );
-
-  worker.on('completed', (job) => {
-    console.log(`[ReportWorker] Job ${job.id} completed successfully`);
-  });
-
-  worker.on('failed', (job, err) => {
-    console.error(`[ReportWorker] Job ${job?.id} failed:`, err);
-  });
-
-  return worker;
+  return { close: async () => {} };
 }

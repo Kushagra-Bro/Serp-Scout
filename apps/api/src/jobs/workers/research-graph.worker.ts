@@ -296,41 +296,10 @@ export async function executeResearchGraphRun(data: ResearchGraphJobData) {
   };
 }
 
+/**
+ * Legacy starter maintained for backwards compatibility.
+ * All workloads are now managed by startMainJobWorker() in main.worker.ts.
+ */
 export function startResearchGraphWorker() {
-  const worker = new Worker<ResearchGraphJobData>(
-    'research-graph',
-    async (job: Job<ResearchGraphJobData>) => {
-      try {
-        return await executeResearchGraphRun(job.data);
-      } catch (err: any) {
-        // Quota failures tell us nothing will change by retrying (the meter or
-        // upstream credits reset on a month boundary, not on a backoff timer),
-        // so fail the job once instead of burning `attempts: 3` + exponential
-        // backoff on every scheduled cycle.
-        if (classifySearchError(err) !== 'other') {
-          throw new UnrecoverableError(err?.message || String(err));
-        }
-        throw err;
-      }
-    },
-    {
-      connection: redisConnection,
-      // The pipeline is fan-out heavy and makes many upstream calls.
-      concurrency: 1,
-      lockDuration: 300000, // 5 minutes for deep graph analysis
-      stalledInterval: 10 * 60 * 1000,
-      maxStalledCount: 2,
-      drainDelay: 5 * 60 * 1000,
-    }
-  );
-
-  worker.on('completed', (job) => {
-    console.log(`[ResearchGraphWorker] Job ${job.id} completed`);
-  });
-
-  worker.on('failed', (job, err) => {
-    console.error(`[ResearchGraphWorker] Job ${job?.id} failed:`, err);
-  });
-
-  return worker;
+  return { close: async () => {} };
 }

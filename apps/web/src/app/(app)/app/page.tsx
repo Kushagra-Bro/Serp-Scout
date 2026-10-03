@@ -311,7 +311,7 @@ export default function OverviewDashboardPage() {
             setAnalysisStatus(null);
             setError(pollErr.message || 'Error checking background analysis status');
           }
-        }, 2000);
+        }, 3500);
       } catch (err: any) {
         setAnalyzing(false);
         setAnalysisStatus(null);
