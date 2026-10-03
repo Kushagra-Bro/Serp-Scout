@@ -72,17 +72,7 @@ export const reportQueue = new Queue('weekly-report', {
   defaultJobOptions,
 });
 
-// 4. Stale-Data Check Queue (M8)
-export const staleQueue = new Queue('stale-check', {
-  connection: redisConnection,
-  defaultJobOptions: {
-    attempts: 2,
-    removeOnComplete: 50,
-    removeOnFail: 200,
-  },
-});
-
-// 5. LangGraph Research Pipeline Queue
+// 4. LangGraph Research Pipeline Queue
 export const researchGraphQueue = new Queue('research-graph', {
   connection: redisConnection,
   defaultJobOptions,
@@ -92,7 +82,6 @@ export const allQueues = [
   websiteAnalysisQueue,
   researchQueue,
   reportQueue,
-  staleQueue,
   researchGraphQueue,
 ];
 

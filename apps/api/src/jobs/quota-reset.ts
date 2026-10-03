@@ -1,5 +1,4 @@
 import { db, workspaces } from '../db/index.js';
-import { staleQueue } from './queues.js';
 
 /**
  * Monthly workspace quota reset.
@@ -7,8 +6,10 @@ import { staleQueue } from './queues.js';
  * Workspace meters (`workspaces.usedQuota`) are described everywhere as monthly
  * ("wait for the next monthly cycle", plans with `monthlyQuota`), but nothing
  * ever reset them — once a workspace hit its cap, every paid refresh failed
- * forever. This module makes the month boundary real: a repeatable BullMQ job
- * runs on the 1st of each month and zeroes every workspace meter.
+ * forever. This module makes the month boundary real: an in-process timer
+ * (`startSystemTimers`) runs this on the 1st of each month and zeroes every
+ * workspace meter. Previously this ran as a BullMQ repeatable; the timer keeps
+ * the same semantics without the standing queue/worker that polled Redis.
  *
  * Safe by construction: it only touches `used_quota`/`updated_at`, re-runs are
  * idempotent, and it never deletes rows.
@@ -29,29 +30,4 @@ export async function runQuotaReset(now: Date = new Date()): Promise<{ resetCoun
   }
 
   return { resetCount: updated.length };
-}
-
-/** First of the month at 00:05 UTC — clears every workspace meter. */
-export const QUOTA_RESET_CRON = '5 0 1 * *';
-
-/**
- * Registers the monthly reset repeatable. Idempotent: a second call in the same
- * Redis simply skips re-registration.
- */
-export async function scheduleQuotaReset(): Promise<void> {
-  const repeatableJobs = await staleQueue.getRepeatableJobs();
-  const alreadyScheduled = repeatableJobs.some((j) => j.name === 'recurring-quota-reset');
-
-  if (!alreadyScheduled) {
-    await staleQueue.add(
-      'recurring-quota-reset',
-      {},
-      {
-        repeat: { pattern: QUOTA_RESET_CRON },
-        jobId: 'system-quota-reset',
-        removeOnFail: 10,
-      }
-    );
-    console.log('[Scheduler] Registered monthly quota reset job (1st of month at 00:05 UTC).');
-  }
 }

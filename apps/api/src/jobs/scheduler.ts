@@ -1,19 +1,16 @@
-import { researchQueue, staleQueue, redisConnection } from './queues.js';
-import { db, workspaces, businesses } from '../db/index.js';
-import { eq } from 'drizzle-orm';
-import { scheduleQuotaReset } from './quota-reset.js';
-
-export const CADENCE_CRON_PATTERNS: Record<string, string> = {
-  daily: '0 6 * * *',      // Daily at 06:00 UTC
-  weekly: '0 6 * * 1',     // Weekly every Monday at 06:00 UTC
-  monthly: '0 6 1 * *',    // Monthly on the 1st at 06:00 UTC
-};
+import { Queue } from 'bullmq';
+import { researchQueue, redisConnection } from './queues.js';
+import { CADENCE_CRON_PATTERNS } from '../lib/cadence.js';
 
 /**
  * Removes any existing repeatable research jobs for a specific workspace.
  *
  * Matches on the exact workspaceId segment rather than a substring, so that
  * removing jobs for `ws-12` does not also remove jobs for `ws-1`.
+ *
+ * Note: the app no longer registers new repeatables (cadence is enforced by the
+ * in-process reconciler reading Postgres), so this is a fail-safe cleanup for
+ * anything left over from earlier versions.
  */
 export async function removeWorkspaceRepeatableJobs(workspaceId: string): Promise<void> {
   const repeatableJobs = await researchQueue.getRepeatableJobs();
@@ -33,18 +30,22 @@ export async function removeWorkspaceRepeatableJobs(workspaceId: string): Promis
 }
 
 /**
- * Registers a repeatable research job for a single business.
+ * Records the intent to run recurring research for a workspace at `cadence`.
  *
- * Does NOT clear existing jobs for the workspace — the caller is responsible
- * for removing stale jobs before registering new ones. This prevents a
- * multi-business workspace from wiping sibling jobs when scheduling.
+ * Callers (the schedule route) are responsible for persisting `refreshCadence`
+ * on the workspace in Postgres. No BullMQ repeatable is registered here: the
+ * periodic catch-up reconciler (`runCatchUpReconciliation`, driven by an
+ * in-process timer every 6h) reads `lastAnalyzedAt` + `refreshCadence` from
+ * Postgres and enqueues overdue refreshes. Postgres is the source of truth and
+ * the research-run queue stays drained between runs, which keeps the worker's
+ * idle Redis polling down to ~1 request per drainDelay instead of every 10s.
  */
 export async function scheduleWorkspaceResearch(params: {
   workspaceId: string;
   cadence: 'daily' | 'weekly' | 'monthly' | 'manual';
   businessId: string;
 }): Promise<{ scheduled: boolean; pattern?: string }> {
-  const { workspaceId, cadence, businessId } = params;
+  const { workspaceId, cadence } = params;
 
   if (cadence === 'manual') {
     console.log(`[Scheduler] Cadence set to manual for workspace ${workspaceId}. No recurring job registered.`);
@@ -53,74 +54,10 @@ export async function scheduleWorkspaceResearch(params: {
 
   const pattern = CADENCE_CRON_PATTERNS[cadence] || CADENCE_CRON_PATTERNS.weekly;
 
-  await researchQueue.add(
-    'recurring-research',
-    {
-      workspaceId,
-      businessId,
-      triggerReport: true,
-    },
-    {
-      repeat: {
-        pattern,
-      },
-      jobId: `repeat-${workspaceId}-${businessId}`,
-    }
+  console.log(
+    `[Scheduler] Cadence ${cadence} (${pattern}) for workspace ${workspaceId} will be enforced by the periodic reconciler.`
   );
-
-  console.log(`[Scheduler] Scheduled recurring research for workspace ${workspaceId} with cadence ${cadence} (${pattern}).`);
   return { scheduled: true, pattern };
-}
-
-/**
- * Registers the system-wide background stale data verification job.
- */
-export async function scheduleStaleCheck(): Promise<void> {
-  // Check if already registered
-  const repeatableJobs = await staleQueue.getRepeatableJobs();
-  const alreadyScheduled = repeatableJobs.some((j) => j.name === 'recurring-stale-check');
-
-  if (!alreadyScheduled) {
-    // Run every 6 hours
-    await staleQueue.add(
-      'recurring-stale-check',
-      {},
-      {
-        repeat: {
-          pattern: '0 */6 * * *',
-        },
-        jobId: 'system-stale-check',
-      }
-    );
-    console.log('[Scheduler] Registered system-wide stale check job (every 6 hours).');
-  }
-}
-
-/**
- * Registers the periodic catch-up reconciliation (every 6 hours, offset from
- * the stale check so they never contend on the same tick).
- *
- * The boot-time pass repairs an outage that just ended; this pass catches an
- * occurrence skipped by a deploy, a lost repeat job, or a Redis flush while the
- * process was otherwise up.
- */
-export async function scheduleCatchUp(): Promise<void> {
-  const repeatableJobs = await staleQueue.getRepeatableJobs();
-  const alreadyScheduled = repeatableJobs.some((j) => j.name === 'recurring-catch-up');
-
-  if (!alreadyScheduled) {
-    await staleQueue.add(
-      'recurring-catch-up',
-      {},
-      {
-        repeat: {
-          pattern: '15 */6 * * *',
-        },
-        jobId: 'system-catch-up',
-      }
-    );
-    console.log('[Scheduler] Registered catch-up reconciliation job (every 6 hours).');
-  }
 }
 
 /**
@@ -155,39 +92,48 @@ export async function triggerImmediateRefresh(params: {
 }
 
 /**
- * Synchronizes all workspace schedules from Neon DB on server startup.
+ * Boot-time synchronization.
+ *
+ * Scheduling is now entirely in-process + DB-driven, so this no longer
+ * registers repeatables. Instead it purges any repeatables left over from the
+ * earlier BullMQ-based scheduler (both the research-run cadence repeats and the
+ * `stale-check` queue's system repeats). Leftover repeats would not only fire
+ * stale work, they would keep their queues perpetually "has future delayed
+ * jobs", forcing the workers back to BullMQ's hard-coded 10-second block cap —
+ * which is exactly the Redis churn budget this change removes.
  */
 export async function syncAllWorkspaceSchedules(): Promise<void> {
-  console.log('[Scheduler] Synchronizing workspace recurring schedules...');
-
+  console.log('[Scheduler] Cleaning up legacy BullMQ repeatables (cadence is now in-process + DB-driven)...');
   try {
-    await scheduleStaleCheck();
-    await scheduleCatchUp();
-    await scheduleQuotaReset();
+    let removed = 0;
 
-    const allWorkspaces = await db.select().from(workspaces);
-    for (const ws of allWorkspaces) {
-      if (ws.refreshCadence && ws.refreshCadence !== 'manual') {
-        // Remove all existing repeatable jobs for this workspace first, then
-        // register a fresh job for EVERY business — not just the first one.
-        await removeWorkspaceRepeatableJobs(ws.id);
-
-        const allBusinesses = await db
-          .select()
-          .from(businesses)
-          .where(eq(businesses.workspaceId, ws.id));
-
-        for (const biz of allBusinesses) {
-          await scheduleWorkspaceResearch({
-            workspaceId: ws.id,
-            cadence: ws.refreshCadence as 'daily' | 'weekly' | 'monthly' | 'manual',
-            businessId: biz.id,
-          });
-        }
+    const researchRepeats = await researchQueue.getRepeatableJobs();
+    for (const job of researchRepeats) {
+      if (job.key) {
+        await researchQueue.removeRepeatableByKey(job.key);
+        removed++;
       }
     }
-    console.log(`[Scheduler] Synchronized schedules for ${allWorkspaces.length} workspaces.`);
-  } catch (err) {
-    console.error('[Scheduler] Schedule sync error:', err);
+
+    // The stale-check queue is no longer exported; open a transient handle just
+    // to sweep any left-over system repeats (stale-check/catch-up/quota-reset).
+    const staleQueue = new Queue('stale-check', { connection: redisConnection });
+    try {
+      const staleRepeats = await staleQueue.getRepeatableJobs();
+      for (const job of staleRepeats) {
+        if (job.key) {
+          await staleQueue.removeRepeatableByKey(job.key);
+          removed++;
+        }
+      }
+    } finally {
+      await staleQueue.close();
+    }
+
+    if (removed > 0) {
+      console.log(`[Scheduler] Removed ${removed} legacy repeatable job(s).`);
+    }
+  } catch (error) {
+    console.error('[Scheduler] Legacy repeatable cleanup failed:', error);
   }
 }

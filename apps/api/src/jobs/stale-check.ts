@@ -1,9 +1,5 @@
-import { Worker, Job } from 'bullmq';
 import { eq } from 'drizzle-orm';
-import { db, businesses, workspaces } from '../../db/index.js';
-import { redisConnection } from '../queues.js';
-import { runCatchUpReconciliation } from '../catchup.js';
-import { runQuotaReset } from '../quota-reset.js';
+import { db, businesses, workspaces } from '../db/index.js';
 
 export interface StaleCheckJobData {
   workspaceId?: string;
@@ -18,9 +14,13 @@ export interface StaleCheckResult {
 
 /**
  * Checks businesses and flags `dataStale = true` if older than workspace staleDaysThreshold.
+ *
+ * Previously this lived in the BullMQ `stale-check` worker. It is now invoked
+ * directly by the in-process system timer so no standing queue/worker has to
+ * poll Redis, which protects the 500k/month Upstash request budget.
  */
 export async function executeStaleCheck(data: StaleCheckJobData): Promise<StaleCheckResult> {
-  console.log(`[StaleCheckWorker] Running stale data evaluation...`);
+  console.log('[StaleCheck] Running stale data evaluation...');
 
   // Query businesses with their parent workspace settings
   const query = db
@@ -65,54 +65,19 @@ export async function executeStaleCheck(data: StaleCheckJobData): Promise<StaleC
 
       if (isStale) {
         markedStaleCount++;
-        console.log(`[StaleCheckWorker] Business "${item.businessName}" (${item.businessId}) marked STALE (threshold: ${thresholdDays} days).`);
+        console.log(`[StaleCheck] Business "${item.businessName}" (${item.businessId}) marked STALE (threshold: ${thresholdDays} days).`);
       } else {
         markedFreshCount++;
-        console.log(`[StaleCheckWorker] Business "${item.businessName}" (${item.businessId}) marked FRESH.`);
+        console.log(`[StaleCheck] Business "${item.businessName}" (${item.businessId}) marked FRESH.`);
       }
     }
   }
 
-  console.log(`[StaleCheckWorker] Evaluation complete. Checked ${filtered.length} businesses, ${markedStaleCount} marked stale, ${markedFreshCount} marked fresh.`);
+  console.log(`[StaleCheck] Evaluation complete. Checked ${filtered.length} businesses, ${markedStaleCount} marked stale, ${markedFreshCount} marked fresh.`);
 
   return {
     checkedCount: filtered.length,
     markedStaleCount,
     markedFreshCount,
   };
-}
-
-export function startStaleCheckWorker() {
-  const worker = new Worker<StaleCheckJobData>(
-    'stale-check',
-    async (job: Job<StaleCheckJobData>) => {
-      // Three concerns share this queue; dispatch by job name so the exported
-      // executeStaleCheck contract stays untouched.
-      if (job.name === 'recurring-catch-up') {
-        return await runCatchUpReconciliation();
-      }
-      if (job.name === 'recurring-quota-reset') {
-        return await runQuotaReset();
-      }
-      return await executeStaleCheck(job.data);
-    },
-    {
-      connection: redisConnection,
-      concurrency: 2,
-      stalledInterval: 10 * 60 * 1000,
-      maxStalledCount: 2,
-      // Stale-check + catch-up + quota-reset all run on long repeating windows;
-      // keep the queue scan rate low to protect the Redis request budget.
-    }
-  );
-
-  worker.on('completed', (job) => {
-    console.log(`[StaleCheckWorker] Job ${job.id} completed successfully`);
-  });
-
-  worker.on('failed', (job, err) => {
-    console.error(`[StaleCheckWorker] Job ${job?.id} failed:`, err);
-  });
-
-  return worker;
 }

@@ -19,8 +19,8 @@ import {
   startResearchWorker,
 } from './jobs/workers/research.worker.js';
 import { startReportWorker } from './jobs/workers/report.worker.js';
-import { startStaleCheckWorker } from './jobs/workers/stale-check.worker.js';
 import { startResearchGraphWorker } from './jobs/workers/research-graph.worker.js';
+import { startSystemTimers } from './jobs/system-timers.js';
 import { syncAllWorkspaceSchedules } from './jobs/scheduler.js';
 import { runCatchUpReconciliation } from './jobs/catchup.js';
 import { allQueues, redisConnection } from './jobs/queues.js';
@@ -90,23 +90,26 @@ app.use('/api/searches', requireAuthenticatedUser, requireWorkspace, searchRunsR
 // Protected Job Polling Routes
 app.use('/api/jobs', requireAuthenticatedUser, jobsRouter);
 
-// Start BullMQ Workers in non-test environments
+// Start BullMQ Workers and in-process background timers in non-test environments.
+// Recurring work no longer uses BullMQ repeatables (they forced standing 10s
+// blocking polls per queue against the Upstash request budget): cadence is
+// enforced by the Postgres-driven catch-up reconciler via an in-process timer.
 const workers: Array<{ close(): Promise<unknown> }> = [];
 if (env.NODE_ENV !== 'test') {
   workers.push(
     startWebsiteAnalysisWorker(),
     startResearchWorker(),
     startReportWorker(),
-    startStaleCheckWorker(),
-    startResearchGraphWorker()
+    startResearchGraphWorker(),
+    startSystemTimers()
   );
-  // Register the repeat jobs first, then reconcile against the database so any
-  // occurrence missed while the process was down gets enqueued. Sequencing this
-  // matters: the catch-up's pending-job scan must see the freshly registered
-  // repeats. A sync failure must not block the repair, hence the intermediate catch.
+  // Purge repeatables left over from the earlier BullMQ-based scheduler, then
+  // reconcile against the database so any occurrence missed while the process
+  // was down gets enqueued. A cleanup failure must not block the repair, hence
+  // the intermediate catch.
   syncAllWorkspaceSchedules()
     .catch((err) => {
-      console.error('Failed to initialize workspace schedules:', err);
+      console.error('Failed to clean up legacy workspace schedules:', err);
     })
     .then(() => runCatchUpReconciliation())
     .then((r) => {
@@ -119,7 +122,7 @@ if (env.NODE_ENV !== 'test') {
     .catch((err) => {
       console.error('[CatchUp] Boot reconciliation failed:', err);
     });
-  console.log('👷 All BullMQ Workers & Repeatable Schedulers initialized');
+  console.log('👷 All BullMQ Workers & background timers initialized');
 }
 
 // Global JSON Error Handler - Ensures API always returns JSON responses

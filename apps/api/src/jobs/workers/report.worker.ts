@@ -253,6 +253,7 @@ export function startReportWorker() {
       lockDuration: 300000, // 5 minutes to generate PDF and LLM report
       stalledInterval: 10 * 60 * 1000,
       maxStalledCount: 2,
+      drainDelay: 5 * 60 * 1000,
     }
   );
 

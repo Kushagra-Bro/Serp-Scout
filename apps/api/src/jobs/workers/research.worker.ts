@@ -199,11 +199,15 @@ export function startWebsiteAnalysisWorker() {
       concurrency: 3,
       lockDuration: 300000, // 5 minutes
       // Reduce passive Redis churn: Upstash meters every request, and BullMQ's
-      // default 30s stalled-scan per worker is the dominant always-on cost.
-      // 10 min is plenty for this app's hourly/weekly cadence (Postgres-based
-      // catch-up converges even if a scan is missed).
+      // default 30s stalled-scan per worker is a dominant always-on cost.
+      // 10 min is plenty for this app's cadence (the Postgres-based reconciler
+      // converges even if a scan is missed).
       stalledInterval: 10 * 60 * 1000,
       maxStalledCount: 2,
+      // When the queue is drained, block ~5 minutes before polling again instead
+      // of BullMQ's default 5s — the blocking pop is 1 Redis request per poll,
+      // and no standing repeatables exist anymore (see system-timers.ts).
+      drainDelay: 5 * 60 * 1000,
     }
   );
 
@@ -230,6 +234,7 @@ export function startResearchWorker() {
       lockDuration: 300000, // 5 minutes to allow multiple SerpApi & LLM calls
       stalledInterval: 10 * 60 * 1000,
       maxStalledCount: 2,
+      drainDelay: 5 * 60 * 1000,
     }
   );
 

@@ -8,7 +8,8 @@ import {
   triggerImmediateRefresh,
   removeWorkspaceRepeatableJobs,
 } from '../jobs/scheduler.js';
-import { getRecentJobs, researchQueue } from '../jobs/queues.js';
+import { computeNextCadenceRun, CADENCE_CRON_PATTERNS } from '../lib/cadence.js';
+import { getRecentJobs } from '../jobs/queues.js';
 
 const router = Router();
 
@@ -49,11 +50,13 @@ router.get('/', async (req: WorkspaceRequest, res: Response): Promise<void> => {
       .from(businesses)
       .where(eq(businesses.workspaceId, workspaceId));
 
-    // Check next scheduled run from BullMQ
-    const repeatableJobs = await researchQueue.getRepeatableJobs();
-    const wsRepeatable = repeatableJobs.find(
-      (j) => j.key?.split(':').includes(workspaceId) || j.id === `repeat-${workspaceId}`
-    );
+    // Next scheduled run derived from the cadence in Postgres (the source of
+    // truth) rather than a BullMQ repeatable, so no Redis scan is needed.
+    const nextRunAt = computeNextCadenceRun(workspace.refreshCadence);
+    const cronPattern =
+      workspace.refreshCadence && workspace.refreshCadence !== 'manual'
+        ? CADENCE_CRON_PATTERNS[workspace.refreshCadence] ?? null
+        : null;
 
     res.json({
       success: true,
@@ -63,8 +66,8 @@ router.get('/', async (req: WorkspaceRequest, res: Response): Promise<void> => {
         notificationEmail: workspace.notificationEmail || null,
         staleDaysThreshold: workspace.staleDaysThreshold || 7,
         lastScheduledRunAt: workspace.lastScheduledRunAt,
-        nextRunAt: wsRepeatable && wsRepeatable.next ? new Date(wsRepeatable.next).toISOString() : null,
-        cronPattern: wsRepeatable ? wsRepeatable.pattern : null,
+        nextRunAt: nextRunAt ? nextRunAt.toISOString() : null,
+        cronPattern,
         businesses: allBusinesses.map((biz) => ({
           id: biz.id,
           name: biz.name,
@@ -121,7 +124,8 @@ router.put('/', async (req: WorkspaceRequest, res: Response): Promise<void> => {
       .where(eq(workspaces.id, workspaceId))
       .returning();
 
-    // 2. Synchronize BullMQ repeatable jobs for ALL businesses in the workspace
+    // 2. Fail-safe cleanup of any legacy repeatables for this workspace;
+    //    cadence itself is enforced by the periodic reconciler reading Postgres.
     await removeWorkspaceRepeatableJobs(workspaceId);
 
     const allBusinesses = await db
