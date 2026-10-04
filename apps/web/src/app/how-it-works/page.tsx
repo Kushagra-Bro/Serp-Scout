@@ -80,7 +80,7 @@ export default function HowItWorksPage() {
           </p>
 
           <p className="text-sm sm:text-base text-slate-600 max-w-2xl mx-auto mb-10 leading-relaxed">
-            Legacy tools confuse Yelp, YellowPages, and Wikipedia with your real rivals. Serp-Scout isolates who actually takes paying clients from you, uncovers striking-distance opportunities, and tells you exactly what to do each week.
+            Legacy tools confuse Yelp, YellowPages, and Wikipedia with your real rivals. Serp-Scout isolates who actually takes paying clients from you, uncovers striking-distance opportunities, and tells you exactly what to do each week—backed by real Google SERP evidence.
           </p>
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
@@ -88,17 +88,9 @@ export default function HowItWorksPage() {
               href="/sign-up?redirect_url=/app"
               className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-8 py-4 rounded-xl font-bold text-sm sm:text-base text-white bg-gradient-to-r from-indigo-600 to-cyan-600 hover:from-indigo-700 hover:to-cyan-700 shadow-xl shadow-indigo-500/25 hover:scale-[1.02] active:scale-[0.98] transition cursor-pointer"
             >
-              <Sparkles className="w-4 h-4 text-cyan-200" />
+              <Sparkles className="w-4 h-4 text-cyan-200 animate-pulse-glow" />
               <span>Run Free Competitive Scan</span>
               <ArrowRight className="w-4 h-4" />
-            </Link>
-
-            <Link
-              href="/sign-in?redirect_url=/app"
-              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-7 py-4 rounded-xl font-bold text-sm sm:text-base text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 transition cursor-pointer"
-            >
-              <Lock className="w-4 h-4 text-slate-500" />
-              <span>Existing User Sign In</span>
             </Link>
           </div>
         </div>
@@ -115,7 +107,7 @@ export default function HowItWorksPage() {
               From Raw Google SERP Data to Direct Customer Calls
             </h2>
             <p className="text-sm sm:text-base text-slate-600 mt-2.5">
-              Here is the automated pipeline executing continuously for every monitored business.
+              Here's how our zero-trust pipeline transforms raw search data into revenue-driving actions you can execute in minutes.
             </p>
           </div>
 
@@ -140,6 +132,10 @@ export default function HowItWorksPage() {
                   <li className="flex items-center gap-2">
                     <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
                     Google Maps Pack positions 1, 2, and 3 tracked alongside organic web results
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                    Zero directory pollution — automatically filters out Yelp, Angi, YellowPages
                   </li>
                 </ul>
               </div>
@@ -218,6 +214,10 @@ export default function HowItWorksPage() {
                 <div className="text-xs text-slate-500">
                   Citing direct competitor evidence rather than generic SEO boilerplate advice.
                 </div>
+                <div className="pt-1 text-xs font-semibold text-indigo-700 flex items-center gap-1.5">
+                  <Target className="w-3.5 h-3.5" />
+                  Grounded in live SERP citations for 100% verifiability
+                </div>
               </div>
               <div className="lg:col-span-6 bg-slate-900 text-slate-200 p-5 rounded-2xl font-mono text-xs border border-slate-800 shadow-xl">
                 <div className="text-slate-400 mb-2 pb-2 border-b border-slate-800 text-[11px] font-bold">
@@ -270,6 +270,10 @@ export default function HowItWorksPage() {
                   <CheckCircle2 className="w-4 h-4 text-emerald-600" />
                   Real business outcomes over vanity visibility scores
                 </div>
+                <div className="text-xs text-slate-600 flex items-center gap-2">
+                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                  Each action links to a verified citation you can audit yourself
+                </div>
               </div>
             </div>
           </div>
@@ -278,16 +282,20 @@ export default function HowItWorksPage() {
 
       {/* ── FINAL CTA BANNER ── */}
       <section className="py-20 bg-gradient-to-b from-slate-900 to-indigo-950 text-white relative overflow-hidden">
+        <div className="absolute inset-0 -z-10 opacity-30">
+          <div className="absolute -bottom-20 left-10 w-80 h-80 bg-cyan-500/20 rounded-full blur-3xl animate-orb-1" />
+          <div className="absolute bottom-20 right-10 w-80 h-80 bg-indigo-500/20 rounded-full blur-3xl animate-orb-2" />
+        </div>
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center relative z-10">
           <span className="text-xs font-extrabold uppercase tracking-wider text-cyan-400 bg-cyan-950/90 px-3.5 py-1.5 rounded-full border border-cyan-800/80 inline-flex items-center gap-1.5">
-            <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
+            <Sparkles className="w-3.5 h-3.5 text-cyan-400 animate-pulse-glow" />
             Ready To Outrank Your Competitors?
           </span>
           <h2 className="text-3xl sm:text-5xl font-black text-white mt-4 mb-4 tracking-tight">
             See Your Real Local Ranking in 2 Minutes
           </h2>
           <p className="text-base sm:text-lg text-slate-300 max-w-2xl mx-auto mb-8 leading-relaxed">
-            Enter your business name and target city. We&apos;ll automatically isolate your direct competitors and generate your first weekly action plan.
+            Enter your business name and target city. We&apos;ll automatically isolate your direct competitors and generate your first weekly action plan—no fluff, just evidence.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
             <Link
@@ -296,13 +304,6 @@ export default function HowItWorksPage() {
             >
               <span>Scan Your Company Now</span>
               <ArrowRight className="w-4 h-4 text-indigo-600" />
-            </Link>
-            <Link
-              href="/sign-in?redirect_url=/app"
-              className="w-full sm:w-auto px-8 py-4 rounded-xl font-bold text-sm sm:text-base text-slate-200 bg-slate-800/90 border border-slate-700 hover:bg-slate-800 hover:text-white transition flex items-center justify-center gap-2"
-            >
-              <Lock className="w-4 h-4 text-cyan-400" />
-              <span>Sign In to Existing Account</span>
             </Link>
           </div>
         </div>

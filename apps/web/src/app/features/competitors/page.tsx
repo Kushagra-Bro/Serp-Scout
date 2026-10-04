@@ -57,26 +57,75 @@ export default function CompetitorsFeaturePage() {
           </p>
 
           <p className="text-sm sm:text-base text-slate-600 max-w-2xl mx-auto mb-10 leading-relaxed">
-            Legacy tools flag Yelp, YellowPages, and Forbes as your competitors. Serp-Scout automatically filters out directories and pinpoints the actual local businesses taking customer phone calls and bookings in your target metro area.
+            Legacy tools flag Yelp, YellowPages, and Forbes as your competitors. Serp-Scout automatically filters out directories and pinpoints the actual local businesses taking customer phone calls and bookings in your target metro area—so every action you take hits a real rival.
           </p>
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
             <Link
-              href="/sign-up?redirect_url=/competitors"
+              href="/sign-up?redirect_url=/app"
               className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-8 py-4 rounded-xl font-bold text-sm sm:text-base text-white bg-gradient-to-r from-indigo-600 to-cyan-600 hover:from-indigo-700 hover:to-cyan-700 shadow-xl shadow-indigo-500/25 hover:scale-[1.02] active:scale-[0.98] transition cursor-pointer"
             >
               <Sparkles className="w-4 h-4 text-cyan-200" />
               <span>Launch Competitor Radar</span>
               <ArrowRight className="w-4 h-4" />
             </Link>
+          </div>
+        </div>
+      </section>
 
-            <Link
-              href="/sign-in?redirect_url=/competitors"
-              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-7 py-4 rounded-xl font-bold text-sm sm:text-base text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 transition cursor-pointer"
-            >
-              <Lock className="w-4 h-4 text-slate-500" />
-              <span>Sign In to View Rivals</span>
-            </Link>
+      {/* Before/After Illustration */}
+      <section className="py-16 bg-white">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center max-w-2xl mx-auto mb-10">
+            <span className="text-xs font-bold uppercase tracking-wider text-indigo-600 bg-indigo-50 px-3 py-1 rounded-full border border-indigo-200">
+              Before vs. After
+            </span>
+            <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 mt-3.5 tracking-tight">
+              Cut the Noise. Focus on Real Rivals.
+            </h2>
+            <p className="text-sm sm:text-base text-slate-600 mt-2.5">
+              Most tools show directories. Serp-Scout shows the businesses actually winning appointments in your city.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="rounded-2xl border border-rose-200 bg-rose-50/60 p-6">
+              <div className="flex items-center gap-2 mb-4">
+                <span className="px-2 py-0.5 rounded bg-rose-200 text-rose-800 text-[10px] font-black uppercase tracking-wider">Legacy Tools</span>
+                <span className="text-xs text-rose-700">Directory-heavy, noisy</span>
+              </div>
+              <div className="space-y-2 text-xs text-slate-700">
+                <div className="p-2 rounded-lg bg-white border border-rose-100">Yelp &bull; Yelp-style aggregator (Position #1)</div>
+                <div className="p-2 rounded-lg bg-white border border-rose-100">YellowPages &bull; Directory</div>
+                <div className="p-2 rounded-lg bg-white border border-rose-100">Angi &bull; Lead aggregator</div>
+                <div className="p-2 rounded-lg bg-white border border-rose-100">Thumbtack &bull; Marketplace</div>
+                <div className="p-2 rounded-lg bg-white border border-rose-100">Local Practice A &bull; Real competitor</div>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50/60 p-6">
+              <div className="flex items-center gap-2 mb-4">
+                <span className="px-2 py-0.5 rounded bg-emerald-200 text-emerald-800 text-[10px] font-black uppercase tracking-wider">Serp-Scout</span>
+                <span className="text-xs text-emerald-700">Only true direct rivals</span>
+              </div>
+              <div className="space-y-2 text-xs text-slate-700">
+                <div className="p-2 rounded-lg bg-white border border-emerald-100 flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                  Local Practice A &bull; Real competitor (Maps #2)
+                </div>
+                <div className="p-2 rounded-lg bg-white border border-emerald-100 flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                  Local Practice B &bull; Real competitor (Maps #1)
+                </div>
+                <div className="p-2 rounded-lg bg-white border border-emerald-100 flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                  Local Practice C &bull; Real competitor (Maps #3)
+                </div>
+                <div className="p-2 rounded-lg bg-white border border-emerald-100 text-slate-500 italic">
+                  Directories filtered out automatically
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </section>
@@ -84,8 +133,16 @@ export default function CompetitorsFeaturePage() {
       {/* Feature Deep Dive */}
       <section className="py-16 bg-white border-y border-slate-200/80">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center max-w-2xl mx-auto mb-10">
+            <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
+              See What Makes a True Competitor
+            </h2>
+            <p className="text-sm sm:text-base text-slate-600 mt-2.5">
+              Real rival detection, verified on live Google SERPs with full geo accuracy.
+            </p>
+          </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            <div className="p-6 rounded-2xl bg-slate-50 border border-slate-200 flex flex-col justify-between">
+            <div className="p-6 rounded-2xl bg-slate-50 border border-slate-200 flex flex-col justify-between hover:shadow-lg hover:scale-[1.01] transition-all animate-fade-in">
               <div>
                 <div className="w-12 h-12 rounded-xl bg-indigo-100 flex items-center justify-center text-indigo-600 mb-4">
                   <MapPin className="w-6 h-6" />
@@ -100,7 +157,7 @@ export default function CompetitorsFeaturePage() {
               </div>
             </div>
 
-            <div className="p-6 rounded-2xl bg-slate-50 border border-slate-200 flex flex-col justify-between">
+            <div className="p-6 rounded-2xl bg-slate-50 border border-slate-200 flex flex-col justify-between hover:shadow-lg hover:scale-[1.01] transition-all animate-fade-in" style={{ animationDelay: '50ms' }}>
               <div>
                 <div className="w-12 h-12 rounded-xl bg-cyan-100 flex items-center justify-center text-cyan-600 mb-4">
                   <TrendingUp className="w-6 h-6" />
@@ -115,7 +172,7 @@ export default function CompetitorsFeaturePage() {
               </div>
             </div>
 
-            <div className="p-6 rounded-2xl bg-slate-50 border border-slate-200 flex flex-col justify-between">
+            <div className="p-6 rounded-2xl bg-slate-50 border border-slate-200 flex flex-col justify-between hover:shadow-lg hover:scale-[1.01] transition-all animate-fade-in" style={{ animationDelay: '100ms' }}>
               <div>
                 <div className="w-12 h-12 rounded-xl bg-emerald-100 flex items-center justify-center text-emerald-600 mb-4">
                   <CheckCircle2 className="w-6 h-6" />
@@ -134,25 +191,23 @@ export default function CompetitorsFeaturePage() {
       </section>
 
       {/* Final CTA */}
-      <section className="py-20 bg-slate-950 text-white text-center">
-        <div className="max-w-3xl mx-auto px-4">
+      <section className="py-20 bg-gradient-to-b from-slate-900 to-indigo-950 text-white relative overflow-hidden">
+        <div className="absolute inset-0 -z-10 opacity-30">
+          <div className="absolute -bottom-20 left-10 w-80 h-80 bg-cyan-500/20 rounded-full blur-3xl animate-orb-1" />
+          <div className="absolute bottom-20 right-10 w-80 h-80 bg-indigo-500/20 rounded-full blur-3xl animate-orb-2" />
+        </div>
+        <div className="max-w-3xl mx-auto px-4 relative z-10">
           <h2 className="text-3xl font-extrabold mb-4">Ready to See Your Direct Competitors?</h2>
-          <p className="text-slate-400 text-sm mb-8">
-            Create your account to unlock full competitive SERP radar tracking for your business.
+          <p className="text-slate-300 text-sm mb-8">
+            Start your free scout to unlock real rival discovery, maps tracking, and evidence-backed actions.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
             <Link
-              href="/sign-up?redirect_url=/competitors"
-              className="w-full sm:w-auto px-8 py-3.5 rounded-xl font-bold bg-indigo-600 hover:bg-indigo-700 text-white transition flex items-center justify-center gap-2"
+              href="/sign-up?redirect_url=/app"
+              className="w-full sm:w-auto px-8 py-3.5 rounded-xl font-bold bg-white hover:bg-slate-100 text-slate-900 transition flex items-center justify-center gap-2 shadow-xl hover:scale-105"
             >
-              <span>Get Started (Redirect to Competitors)</span>
-              <ArrowRight className="w-4 h-4" />
-            </Link>
-            <Link
-              href="/sign-in?redirect_url=/competitors"
-              className="w-full sm:w-auto px-8 py-3.5 rounded-xl font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 transition"
-            >
-              Sign In to Account
+              <span>Get Started Free</span>
+              <ArrowRight className="w-4 h-4 text-indigo-600" />
             </Link>
           </div>
         </div>

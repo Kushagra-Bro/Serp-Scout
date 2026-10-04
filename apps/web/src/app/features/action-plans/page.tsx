@@ -54,7 +54,7 @@ export default function ActionPlansFeaturePage() {
           </p>
 
           <p className="text-sm sm:text-base text-slate-600 max-w-2xl mx-auto mb-10 leading-relaxed">
-            Eliminate vanity metrics. Every week, Serp-Scout analyzes your local Google SERP shifts and delivers 3 to 5 high-impact, verified tasks that directly win customer phone calls and outrank your top competitors.
+            Eliminate vanity metrics. Every week, Serp-Scout analyzes your local Google SERP shifts and delivers 3 to 5 high-impact, verified tasks that directly win customer phone calls and outrank your top competitors—each backed by a live SERP citation.
           </p>
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
@@ -62,27 +62,55 @@ export default function ActionPlansFeaturePage() {
               href="/sign-up?redirect_url=/app"
               className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-8 py-4 rounded-xl font-bold text-sm sm:text-base text-white bg-gradient-to-r from-indigo-600 to-cyan-600 hover:from-indigo-700 hover:to-cyan-700 shadow-xl shadow-indigo-500/25 hover:scale-[1.02] active:scale-[0.98] transition cursor-pointer"
             >
-              <Sparkles className="w-4 h-4 text-cyan-200" />
+              <Sparkles className="w-4 h-4 text-cyan-200 animate-pulse-glow" />
               <span>Get Your Action Plan</span>
               <ArrowRight className="w-4 h-4" />
-            </Link>
-
-            <Link
-              href="/sign-in?redirect_url=/app"
-              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-7 py-4 rounded-xl font-bold text-sm sm:text-base text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 transition cursor-pointer"
-            >
-              <Lock className="w-4 h-4 text-slate-500" />
-              <span>Sign In to Action Playbook</span>
             </Link>
           </div>
         </div>
       </section>
 
+      {/* Action Plan Preview */}
+      <section className="py-16 bg-white">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center max-w-2xl mx-auto mb-10">
+            <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
+              Actionable, Verifiable, Prioritized
+            </h2>
+            <p className="text-sm sm:text-base text-slate-600 mt-2.5">
+              Get concrete steps with evidence links—so you know exactly why each task matters.
+            </p>
+          </div>
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-lg p-6 space-y-4">
+            {[
+              { title: 'Publish "Emergency Dental Austin" service page', impact: 'High', effort: 'Low', evidence: 'SERP Citation #SERP-8492' },
+              { title: 'Update Google Business Profile primary category to Emergency Dental Service', impact: 'High', effort: 'Low', evidence: 'Maps 3-Pack analysis' },
+              { title: 'Add location schema + openingHours for same-day availability', impact: 'High', effort: 'Low', evidence: 'Competitor schema diff' },
+            ].map((item, i) => (
+              <div key={i} className="p-4 rounded-xl border border-slate-200 bg-slate-50/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <h3 className="font-semibold text-slate-900 text-sm">{item.title}</h3>
+                  <div className="flex items-center gap-2 mt-1 flex-wrap">
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold">{item.impact} Impact</span>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 font-bold">{item.effort} Effort</span>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200">{item.evidence}</span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 text-xs text-emerald-700 font-bold self-start sm:self-auto">
+                  <CheckCircle2 className="w-4 h-4" />
+                  Evidence-Backed
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
       {/* Feature Deep Dive */}
-      <section className="py-16 bg-white border-y border-slate-200/80">
+      <section className="py-16 bg-slate-50 border-y border-slate-200/80">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            <div className="p-6 rounded-2xl bg-slate-50 border border-slate-200 flex flex-col justify-between">
+            <div className="p-6 rounded-2xl bg-white border border-slate-200 flex flex-col justify-between hover:shadow-lg hover:scale-[1.01] transition-all animate-fade-in">
               <div>
                 <div className="w-12 h-12 rounded-xl bg-emerald-100 flex items-center justify-center text-emerald-600 mb-4">
                   <ShieldCheck className="w-6 h-6" />
@@ -97,7 +125,7 @@ export default function ActionPlansFeaturePage() {
               </div>
             </div>
 
-            <div className="p-6 rounded-2xl bg-slate-50 border border-slate-200 flex flex-col justify-between">
+            <div className="p-6 rounded-2xl bg-white border border-slate-200 flex flex-col justify-between hover:shadow-lg hover:scale-[1.01] transition-all animate-fade-in" style={{ animationDelay: '50ms' }}>
               <div>
                 <div className="w-12 h-12 rounded-xl bg-indigo-100 flex items-center justify-center text-indigo-600 mb-4">
                   <Zap className="w-6 h-6" />
@@ -112,7 +140,7 @@ export default function ActionPlansFeaturePage() {
               </div>
             </div>
 
-            <div className="p-6 rounded-2xl bg-slate-50 border border-slate-200 flex flex-col justify-between">
+            <div className="p-6 rounded-2xl bg-white border border-slate-200 flex flex-col justify-between hover:shadow-lg hover:scale-[1.01] transition-all animate-fade-in" style={{ animationDelay: '100ms' }}>
               <div>
                 <div className="w-12 h-12 rounded-xl bg-cyan-100 flex items-center justify-center text-cyan-600 mb-4">
                   <Activity className="w-6 h-6" />
@@ -131,25 +159,23 @@ export default function ActionPlansFeaturePage() {
       </section>
 
       {/* Final CTA */}
-      <section className="py-20 bg-slate-950 text-white text-center">
-        <div className="max-w-3xl mx-auto px-4">
+      <section className="py-20 bg-gradient-to-b from-slate-900 to-indigo-950 text-white relative overflow-hidden">
+        <div className="absolute inset-0 -z-10 opacity-30">
+          <div className="absolute -bottom-20 left-10 w-80 h-80 bg-cyan-500/20 rounded-full blur-3xl animate-orb-1" />
+          <div className="absolute bottom-20 right-10 w-80 h-80 bg-indigo-500/20 rounded-full blur-3xl animate-orb-2" />
+        </div>
+        <div className="max-w-3xl mx-auto px-4 relative z-10">
           <h2 className="text-3xl font-extrabold mb-4">Execute Verified Actions That Win Clients</h2>
-          <p className="text-slate-400 text-sm mb-8">
-            Start your free scout to get your first week of prioritized, evidence-backed SEO actions.
+          <p className="text-slate-300 text-sm mb-8">
+            Start your free scout to get your first week of prioritized, evidence-backed SEO actions—each verifiable with live SERP citations.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
             <Link
               href="/sign-up?redirect_url=/app"
-              className="w-full sm:w-auto px-8 py-3.5 rounded-xl font-bold bg-indigo-600 hover:bg-indigo-700 text-white transition flex items-center justify-center gap-2"
+              className="w-full sm:w-auto px-8 py-3.5 rounded-xl font-bold bg-white hover:bg-slate-100 text-slate-900 transition flex items-center justify-center gap-2 shadow-xl hover:scale-105"
             >
-              <span>Get Started (Redirect to Overview)</span>
-              <ArrowRight className="w-4 h-4" />
-            </Link>
-            <Link
-              href="/sign-in?redirect_url=/app"
-              className="w-full sm:w-auto px-8 py-3.5 rounded-xl font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 transition"
-            >
-              Sign In to Account
+              <span>Get Started Free</span>
+              <ArrowRight className="w-4 h-4 text-indigo-600" />
             </Link>
           </div>
         </div>

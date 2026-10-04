@@ -53,35 +53,66 @@ export default function ContentGapsFeaturePage() {
           </p>
 
           <p className="text-sm sm:text-base text-slate-600 max-w-2xl mx-auto mb-10 leading-relaxed">
-            If a rival dentist ranks #1 for &quot;Emergency Extractions,&quot; it&apos;s usually because they have a dedicated service page that your website lacks. Serp-Scout crawls rival sitemaps and pinpoints your missing high-converting pages.
+            If a rival ranks #1 for a high-intent treatment, it's usually because they have a dedicated page you don't. Serp-Scout crawls rival sitemaps, analyzes their top-performing pages, and pinpoints exactly which high-converting pages you're missing.
           </p>
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
             <Link
-              href="/sign-up?redirect_url=/content"
+              href="/sign-up?redirect_url=/app"
               className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-8 py-4 rounded-xl font-bold text-sm sm:text-base text-white bg-gradient-to-r from-indigo-600 to-cyan-600 hover:from-indigo-700 hover:to-cyan-700 shadow-xl shadow-indigo-500/25 hover:scale-[1.02] active:scale-[0.98] transition cursor-pointer"
             >
               <Sparkles className="w-4 h-4 text-cyan-200" />
               <span>Audit Content Gaps</span>
               <ArrowRight className="w-4 h-4" />
             </Link>
+          </div>
+        </div>
+      </section>
 
-            <Link
-              href="/sign-in?redirect_url=/content"
-              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-7 py-4 rounded-xl font-bold text-sm sm:text-base text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 transition cursor-pointer"
-            >
-              <Lock className="w-4 h-4 text-slate-500" />
-              <span>Sign In to Content Gaps</span>
-            </Link>
+      {/* Gap Analysis Illustration */}
+      <section className="py-16 bg-white">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center max-w-2xl mx-auto mb-10">
+            <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
+              Turn Missing Pages Into Ranking Gains
+            </h2>
+            <p className="text-sm sm:text-base text-slate-600 mt-2.5">
+              See exactly what content your rivals have that you're missing—ordered by revenue potential.
+            </p>
+          </div>
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-lg overflow-hidden">
+            <div className="grid grid-cols-12 bg-slate-950 text-white text-xs font-bold px-4 sm:px-6 py-3 items-center">
+              <div className="col-span-6">Missing Page/Topic</div>
+              <div className="col-span-3">Rival Has It</div>
+              <div className="col-span-3 text-right">Priority</div>
+            </div>
+            <div className="divide-y divide-slate-200">
+              {[
+                { title: '/emergency-same-day-dentist-austin', rival: 'Yes (Ranks #1)', prio: 'Critical' },
+                { title: '/dental-extractions-austin', rival: 'Yes (Top 3)', prio: 'High' },
+                { title: '/service-areas/north-austin', rival: 'Yes (Service Area Pages)', prio: 'High' },
+                { title: '/insurance/financing', rival: 'Yes (FAQ + Snippets)', prio: 'High' },
+              ].map((item, i) => (
+                <div key={i} className="grid grid-cols-12 px-4 sm:px-6 py-3 items-center hover:bg-slate-50/80 transition">
+                  <div className="col-span-6 text-sm font-medium text-slate-900 truncate">{item.title}</div>
+                  <div className="col-span-3">
+                    <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">{item.rival}</span>
+                  </div>
+                  <div className="col-span-3 text-right">
+                    <span className="text-xs font-bold text-indigo-700">{item.prio}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </section>
 
       {/* Feature Deep Dive */}
-      <section className="py-16 bg-white border-y border-slate-200/80">
+      <section className="py-16 bg-slate-50 border-y border-slate-200/80">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            <div className="p-6 rounded-2xl bg-slate-50 border border-slate-200 flex flex-col justify-between">
+            <div className="p-6 rounded-2xl bg-white border border-slate-200 flex flex-col justify-between hover:shadow-lg hover:scale-[1.01] transition-all animate-fade-in">
               <div>
                 <div className="w-12 h-12 rounded-xl bg-indigo-100 flex items-center justify-center text-indigo-600 mb-4">
                   <Layers className="w-6 h-6" />
@@ -96,7 +127,7 @@ export default function ContentGapsFeaturePage() {
               </div>
             </div>
 
-            <div className="p-6 rounded-2xl bg-slate-50 border border-slate-200 flex flex-col justify-between">
+            <div className="p-6 rounded-2xl bg-white border border-slate-200 flex flex-col justify-between hover:shadow-lg hover:scale-[1.01] transition-all animate-fade-in" style={{ animationDelay: '50ms' }}>
               <div>
                 <div className="w-12 h-12 rounded-xl bg-cyan-100 flex items-center justify-center text-cyan-600 mb-4">
                   <Search className="w-6 h-6" />
@@ -111,7 +142,7 @@ export default function ContentGapsFeaturePage() {
               </div>
             </div>
 
-            <div className="p-6 rounded-2xl bg-slate-50 border border-slate-200 flex flex-col justify-between">
+            <div className="p-6 rounded-2xl bg-white border border-slate-200 flex flex-col justify-between hover:shadow-lg hover:scale-[1.01] transition-all animate-fade-in" style={{ animationDelay: '100ms' }}>
               <div>
                 <div className="w-12 h-12 rounded-xl bg-emerald-100 flex items-center justify-center text-emerald-600 mb-4">
                   <CheckCircle2 className="w-6 h-6" />
@@ -130,25 +161,23 @@ export default function ContentGapsFeaturePage() {
       </section>
 
       {/* Final CTA */}
-      <section className="py-20 bg-slate-950 text-white text-center">
-        <div className="max-w-3xl mx-auto px-4">
+      <section className="py-20 bg-gradient-to-b from-slate-900 to-indigo-950 text-white relative overflow-hidden">
+        <div className="absolute inset-0 -z-10 opacity-30">
+          <div className="absolute -bottom-20 left-10 w-80 h-80 bg-cyan-500/20 rounded-full blur-3xl animate-orb-1" />
+          <div className="absolute bottom-20 right-10 w-80 h-80 bg-indigo-500/20 rounded-full blur-3xl animate-orb-2" />
+        </div>
+        <div className="max-w-3xl mx-auto px-4 relative z-10">
           <h2 className="text-3xl font-extrabold mb-4">Close Your Content Gaps Today</h2>
-          <p className="text-slate-400 text-sm mb-8">
-            See which high-converting landing pages your competitors are using to capture appointments.
+          <p className="text-slate-300 text-sm mb-8">
+            See which high-converting landing pages your competitors are using to capture appointments—backed by live SERP evidence.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
             <Link
-              href="/sign-up?redirect_url=/content"
-              className="w-full sm:w-auto px-8 py-3.5 rounded-xl font-bold bg-indigo-600 hover:bg-indigo-700 text-white transition flex items-center justify-center gap-2"
+              href="/sign-up?redirect_url=/app"
+              className="w-full sm:w-auto px-8 py-3.5 rounded-xl font-bold bg-white hover:bg-slate-100 text-slate-900 transition flex items-center justify-center gap-2 shadow-xl hover:scale-105"
             >
-              <span>Get Started (Redirect to Content Gaps)</span>
-              <ArrowRight className="w-4 h-4" />
-            </Link>
-            <Link
-              href="/sign-in?redirect_url=/content"
-              className="w-full sm:w-auto px-8 py-3.5 rounded-xl font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 transition"
-            >
-              Sign In to Account
+              <span>Get Started Free</span>
+              <ArrowRight className="w-4 h-4 text-indigo-600" />
             </Link>
           </div>
         </div>
