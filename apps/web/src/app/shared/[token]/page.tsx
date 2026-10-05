@@ -156,7 +156,7 @@ export default function SharedReportPage({ params }: { params: { token: string }
 
   const { report, business, recommendations, share } = data;
   const summary = report.summary;
-  const exec = summary.executiveSummary;
+  const exec = summary?.executiveSummary || summary;
   const canToggleMode = share.viewMode === 'specialist';
 
   return (

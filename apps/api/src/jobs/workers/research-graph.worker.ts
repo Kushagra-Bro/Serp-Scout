@@ -227,7 +227,7 @@ export async function executeResearchGraphRun(data: ResearchGraphJobData) {
         businessId,
         periodStart: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
         periodEnd: new Date(),
-        summary: state.report.executiveSummary,
+        summary: state.report as any,
         status: 'published',
       })
       .returning();

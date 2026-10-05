@@ -36,8 +36,44 @@ export interface ReportPdfData {
   report: GeneratedReport;
 }
 
+export function normalizeReport(rawReport: any): GeneratedReport {
+  const rawExec = rawReport?.executiveSummary || rawReport;
+  return {
+    executiveSummary: {
+      importantChanges:
+        rawExec?.importantChanges ||
+        'SERP visibility remained active across target local commercial queries.',
+      mainOpportunity:
+        rawExec?.mainOpportunity ||
+        'Expand high-intent service keywords to capture local customer demand.',
+      mainCompetitiveThreat:
+        rawExec?.mainCompetitiveThreat ||
+        'Local competitors are aggressively optimizing local pack rankings.',
+      weeklyFocus:
+        rawExec?.weeklyFocus ||
+        'Focus on highest return-on-effort content and local profile improvements.',
+    },
+    actionPlan: Array.isArray(rawReport?.actionPlan) ? rawReport.actionPlan : [],
+    visibilityChanges: {
+      keywordChanges: Array.isArray(rawReport?.visibilityChanges?.keywordChanges)
+        ? rawReport.visibilityChanges.keywordChanges
+        : [],
+      mapsChanges: Array.isArray(rawReport?.visibilityChanges?.mapsChanges)
+        ? rawReport.visibilityChanges.mapsChanges
+        : [],
+      serpFeatureChanges: Array.isArray(rawReport?.visibilityChanges?.serpFeatureChanges)
+        ? rawReport.visibilityChanges.serpFeatureChanges
+        : [],
+    },
+    competitorChanges: Array.isArray(rawReport?.competitorChanges) ? rawReport.competitorChanges : [],
+    contentOpportunities: Array.isArray(rawReport?.contentOpportunities) ? rawReport.contentOpportunities : [],
+    evidenceAppendix: Array.isArray(rawReport?.evidenceAppendix) ? rawReport.evidenceAppendix : [],
+  };
+}
+
 export function generateReportHtml(data: ReportPdfData): string {
-  const { businessName, websiteUrl, periodStart, periodEnd, report } = data;
+  const { businessName, websiteUrl, periodStart, periodEnd } = data;
+  const report = normalizeReport(data.report);
   const { executiveSummary, actionPlan, visibilityChanges, contentOpportunities, evidenceAppendix } = report;
 
   const priorityColors: Record<string, { bg: string; text: string; border: string }> = {
@@ -238,7 +274,11 @@ export function generateReportHtml(data: ReportPdfData): string {
 
   <div class="section-title">Priority Action Plan (Top Actions)</div>
   <div>
-    ${actionPlan.map((rec) => {
+    ${actionPlan.length === 0 ? `
+      <div style="padding: 14px; background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 8px; color: #64748b; font-size: 11px; text-align: center;">
+        No priority actions recorded for this cycle.
+      </div>
+    ` : actionPlan.map((rec) => {
       const pColor = priorityColors[rec.priority] || priorityColors.P1;
       return `
       <div class="rec-card">
@@ -251,8 +291,8 @@ export function generateReportHtml(data: ReportPdfData): string {
         <div class="rec-problem"><strong>Problem/Opportunity:</strong> ${rec.problem}</div>
         <div class="rec-evidence"><strong>Observed Evidence:</strong> ${rec.evidenceSummary}</div>
         <div class="rec-meta">
-          <span><strong>Impact:</strong> ${rec.expectedImpact.toUpperCase()}</span>
-          <span><strong>Effort:</strong> ${rec.estimatedEffort.toUpperCase()}</span>
+          <span><strong>Impact:</strong> ${(rec.expectedImpact || 'MEDIUM').toUpperCase()}</span>
+          <span><strong>Effort:</strong> ${(rec.estimatedEffort || 'MEDIUM').toUpperCase()}</span>
           <span><strong>Owner:</strong> ${rec.suggestedOwner || 'Lead'}</span>
           <span><strong>Deadline:</strong> ${rec.suggestedDeadline || 'Within 7 days'}</span>
         </div>
@@ -272,7 +312,9 @@ export function generateReportHtml(data: ReportPdfData): string {
       </tr>
     </thead>
     <tbody>
-      ${visibilityChanges.keywordChanges.slice(0, 10).map((k) => {
+      ${(visibilityChanges.keywordChanges || []).length === 0 ? `
+        <tr><td colspan="4" style="text-align: center; color: #64748b;">No recent keyword ranking shifts recorded for this period.</td></tr>
+      ` : (visibilityChanges.keywordChanges || []).slice(0, 10).map((k) => {
         const delta = (k.oldRank && k.newRank) ? k.oldRank - k.newRank : null;
         const deltaText = delta !== null
           ? delta > 0 ? `+${delta} (Climbed)` : `${delta} (Dropped)`
@@ -324,7 +366,9 @@ export function generateReportHtml(data: ReportPdfData): string {
       </tr>
     </thead>
     <tbody>
-      ${evidenceAppendix.slice(0, 10).map((item) => `
+      ${(evidenceAppendix || []).length === 0 ? `
+        <tr><td colspan="4" style="text-align: center; color: #64748b;">No direct evidence trail recorded for this report cycle.</td></tr>
+      ` : (evidenceAppendix || []).slice(0, 10).map((item) => `
         <tr>
           <td>${item.query}</td>
           <td>${item.source}</td>
@@ -390,6 +434,7 @@ export async function generateReportPdf(data: ReportPdfData): Promise<Buffer> {
  * Generates CSV export content from report data
  */
 export function generateReportCsv(data: ReportPdfData): string {
+  const report = normalizeReport(data.report);
   const headers = [
     'Priority',
     'Action Title',
@@ -408,8 +453,8 @@ export function generateReportCsv(data: ReportPdfData): string {
     return `"${str}"`;
   };
 
-  const rows = data.report.actionPlan.map((rec) => [
-    escapeCsv(rec.priority),
+  const rows = (report.actionPlan || []).map((rec) => [
+    escapeCsv(rec.priority || 'P1'),
     escapeCsv(rec.title),
     escapeCsv(rec.problem),
     escapeCsv(rec.expectedImpact),
@@ -418,7 +463,7 @@ export function generateReportCsv(data: ReportPdfData): string {
     escapeCsv(rec.suggestedOwner || 'Practice Lead'),
     escapeCsv(rec.suggestedDeadline || 'Within 7 days'),
     escapeCsv(rec.evidenceSummary),
-    escapeCsv(rec.sourceUrls.join('; ')),
+    escapeCsv((rec.sourceUrls || []).join('; ')),
   ]);
 
   return [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');

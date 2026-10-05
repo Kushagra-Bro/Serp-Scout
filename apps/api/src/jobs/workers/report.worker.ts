@@ -154,7 +154,7 @@ export async function executeReportGeneration(data: ReportJobData) {
       businessId,
       periodStart: new Date(periodStart),
       periodEnd: new Date(periodEnd),
-      summary: generatedReport.executiveSummary,
+      summary: generatedReport as any,
       status: 'published',
       generatedAt: new Date(),
     })

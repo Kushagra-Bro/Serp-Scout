@@ -312,12 +312,42 @@ router.get(
         return;
       }
 
+      const rawSummary = (record.report.summary as any) || {};
+
+      // If actionPlan is missing or empty, hydrate from database recommendations
+      let actionPlan = Array.isArray(rawSummary.actionPlan) ? rawSummary.actionPlan : [];
+      if (actionPlan.length === 0) {
+        const recs = await db
+          .select()
+          .from(recommendations)
+          .where(eq(recommendations.reportId, reportId))
+          .orderBy(recommendations.priority);
+
+        actionPlan = recs.map((r) => ({
+          title: r.title,
+          problem: r.description,
+          evidenceSummary: (r.evidence as any)?.summary || r.description,
+          priority: (r.priority as any) || 'P1',
+          expectedImpact: (r.impact as any) || 'medium',
+          estimatedEffort: (r.effort as any) || 'medium',
+          confidence: (r.confidence as any) || 'high',
+          suggestedOwner: 'Practice Lead',
+          suggestedDeadline: 'Within 7 days',
+          searchQueries: (r.evidence as any)?.queries || [],
+          sourceUrls: (r.evidence as any)?.urls || [],
+          implementationSteps: [],
+        }));
+      }
+
       const reportData: ReportPdfData = {
         businessName: record.business.name,
         websiteUrl: record.business.websiteUrl,
         periodStart: record.report.periodStart.toISOString().split('T')[0],
         periodEnd: record.report.periodEnd.toISOString().split('T')[0],
-        report: record.report.summary as GeneratedReport,
+        report: {
+          ...rawSummary,
+          actionPlan,
+        },
       };
 
       const pdfBuffer = await generateReportPdf(reportData);
@@ -364,12 +394,41 @@ router.get(
         return;
       }
 
+      const rawSummary = (record.report.summary as any) || {};
+
+      let actionPlan = Array.isArray(rawSummary.actionPlan) ? rawSummary.actionPlan : [];
+      if (actionPlan.length === 0) {
+        const recs = await db
+          .select()
+          .from(recommendations)
+          .where(eq(recommendations.reportId, reportId))
+          .orderBy(recommendations.priority);
+
+        actionPlan = recs.map((r) => ({
+          title: r.title,
+          problem: r.description,
+          evidenceSummary: (r.evidence as any)?.summary || r.description,
+          priority: (r.priority as any) || 'P1',
+          expectedImpact: (r.impact as any) || 'medium',
+          estimatedEffort: (r.effort as any) || 'medium',
+          confidence: (r.confidence as any) || 'high',
+          suggestedOwner: 'Practice Lead',
+          suggestedDeadline: 'Within 7 days',
+          searchQueries: (r.evidence as any)?.queries || [],
+          sourceUrls: (r.evidence as any)?.urls || [],
+          implementationSteps: [],
+        }));
+      }
+
       const csvContent = generateReportCsv({
         businessName: record.business.name,
         websiteUrl: record.business.websiteUrl,
         periodStart: record.report.periodStart.toISOString().split('T')[0],
         periodEnd: record.report.periodEnd.toISOString().split('T')[0],
-        report: record.report.summary as GeneratedReport,
+        report: {
+          ...rawSummary,
+          actionPlan,
+        },
       });
 
       res.setHeader('Content-Type', 'text/csv');

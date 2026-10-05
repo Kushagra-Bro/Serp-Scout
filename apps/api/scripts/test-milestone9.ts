@@ -335,7 +335,7 @@ async function main() {
       businessId: bizAlpha.id,
       periodStart: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
       periodEnd: new Date(),
-      summary: reportDoc.executiveSummary,
+      summary: reportDoc as any,
       status: 'published',
     })
     .returning();
