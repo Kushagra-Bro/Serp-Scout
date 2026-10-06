@@ -1,5 +1,6 @@
 import { executeStaleCheck } from './stale-check.js';
 import { runCatchUpReconciliation } from './catchup.js';
+import { runRankFreshnessReconciliation } from './rank-freshness.js';
 import { runQuotaReset } from './quota-reset.js';
 import { nextQuotaResetDelayMs } from '../lib/cadence.js';
 
@@ -51,6 +52,15 @@ export function startSystemTimers(): SystemTimersHandle {
     void runSafe('catch-up')(runCatchUpReconciliation);
   }, SIX_HOURS_MS + CATCHUP_OFFSET_MS);
   timers.push(catchUpTimer);
+
+  // Ranking freshness every 6 hours, offset again so the three passes never
+  // stack. This is what keeps the Keywords page pre-computed: any monitored
+  // keyword whose stored position is older than the freshness window (or was
+  // never checked) gets a ranking sweep queued automatically.
+  const rankFreshnessTimer = setInterval(() => {
+    void runSafe('rank-freshness')(() => runRankFreshnessReconciliation());
+  }, SIX_HOURS_MS + 2 * CATCHUP_OFFSET_MS);
+  timers.push(rankFreshnessTimer);
 
   // Monthly quota reset on the 1st at 00:05 UTC (`5 0 1 * *`). If the delay
   // exceeds Node's max timeout, we sleep in chunks to avoid integer overflow.

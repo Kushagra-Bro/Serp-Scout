@@ -9,6 +9,7 @@ import {
   rankingObservations,
 } from '../db/index.js';
 import { executeSearchRun } from './search-run.service.js';
+import { classifySearchError } from '../lib/search-errors.js';
 
 export interface KeywordRankingDetail {
   keyword: {
@@ -180,13 +181,39 @@ export async function getRankingsForBusiness(
       (o) => o.domain.toLowerCase().includes(userDomain) || userDomain.includes(o.domain.toLowerCase())
     );
 
-    const latestUserObs = userObsList[0] || null;
-    const previousUserObs = userObsList[1] || null;
+    // Group the business's own observations by the search run that produced
+    // them. `currentRank` must be the *best* position seen in the most recent
+    // check, not whichever row was inserted last: a single SERP can contain the
+    // same domain several times (e.g. #1 and #6), and ordering by observedAt
+    // DESC then reported the worst of them while showing the runner-up as
+    // "previous" — a fake delta computed inside one check.
+    const checksByRun = new Map<
+      string,
+      { rank: number; observedAt: Date; obs: (typeof userObsList)[number] }
+    >();
+    for (const obs of userObsList) {
+      const key = obs.searchRunId ?? `observation:${obs.id}`;
+      const observedAt = new Date(obs.observedAt);
+      const existing = checksByRun.get(key);
+      if (!existing) {
+        checksByRun.set(key, { rank: obs.rank, observedAt, obs });
+      } else {
+        if (obs.rank < existing.rank) {
+          existing.rank = obs.rank;
+          existing.obs = obs;
+        }
+        if (observedAt.getTime() > existing.observedAt.getTime()) existing.observedAt = observedAt;
+      }
+    }
+
+    const checks = [...checksByRun.values()].sort(
+      (a, b) => b.observedAt.getTime() - a.observedAt.getTime()
+    );
+    const latestCheck = checks[0] ?? null;
+    const previousCheck = checks[1] ?? null;
 
     const delta =
-      latestUserObs && previousUserObs
-        ? previousUserObs.rank - latestUserObs.rank
-        : null;
+      latestCheck && previousCheck ? previousCheck.rank - latestCheck.rank : null;
 
     // Find best competitor observation
     const competitorObs = kwObs
@@ -205,13 +232,13 @@ export async function getRankingsForBusiness(
         opportunityScore: kw.opportunityScore,
         createdAt: kw.createdAt,
       },
-      currentRank: latestUserObs ? latestUserObs.rank : null,
-      previousRank: previousUserObs ? previousUserObs.rank : null,
+      currentRank: latestCheck ? latestCheck.rank : null,
+      previousRank: previousCheck ? previousCheck.rank : null,
       delta,
-      resultType: latestUserObs ? latestUserObs.resultType : null,
-      url: latestUserObs ? latestUserObs.url : null,
-      serpFeatures: (latestUserObs?.serpFeatures as string[]) || null,
-      lastObservedAt: latestUserObs ? latestUserObs.observedAt : null,
+      resultType: latestCheck ? latestCheck.obs.resultType : null,
+      url: latestCheck ? latestCheck.obs.url : null,
+      serpFeatures: (latestCheck?.obs.serpFeatures as string[]) || null,
+      lastObservedAt: latestCheck ? latestCheck.observedAt : null,
       bestCompetitorRank: bestComp ? bestComp.rank : null,
       bestCompetitorDomain: bestComp ? bestComp.domain : null,
     });
@@ -221,7 +248,8 @@ export async function getRankingsForBusiness(
 }
 
 /**
- * Refreshes ranking observations for all tracking or approved keywords
+ * Refreshes ranking observations for the least-recently-checked tracking,
+ * approved and candidate keywords (capped per pass to respect search quotas).
  */
 export async function refreshKeywordRankings(params: {
   businessId: string;
@@ -229,12 +257,29 @@ export async function refreshKeywordRankings(params: {
   searchType?: 'google' | 'google_maps';
 }): Promise<{
   refreshedCount: number;
+  failedCount: number;
+  failures: Array<{ phrase: string; error: string }>;
+  /** Observations written for this business's own domain or a confirmed rival. */
+  observationsRecorded: number;
+  /** Monitored keywords that still have no stored check at all after this pass. */
+  uncheckedRemaining: number;
+  /** True when the search meter/provider refused a query, so the sweep stopped early. */
+  quotaExhausted: boolean;
   details: KeywordRankingDetail[];
 }> {
   const { businessId, workspaceId, searchType = 'google' } = params;
 
-  // 1. Get all keywords marked 'tracking' or 'approved'
-  const activeKeywords = await db
+  // 1. Get every keyword that should be monitored. The cap below protects the
+  //    search quota, so the slice must rotate instead of pinning the same first
+  //    ten rows forever — otherwise most of a large keyword set can never
+  //    accumulate a single observation.
+  //
+  //    Staleness is read from `search_runs` (one row per checked phrase), not
+  //    from `ranking_observations`: an observation only exists when the business
+  //    or a confirmed competitor actually appeared in the results, so
+  //    observation timestamps would keep re-selecting the same unrankable
+  //    keywords and starve every keyword that can produce data.
+  const eligibleKeywords = await db
     .select()
     .from(keywords)
     .where(
@@ -243,9 +288,49 @@ export async function refreshKeywordRankings(params: {
         inArray(keywords.status, ['tracking', 'approved', 'candidate'])
       )
     )
-    .limit(10); // cap per refresh to respect quotas
+    .orderBy(desc(keywords.opportunityScore));
+
+  const lastCheckedAt = new Map<string, number>();
+  if (eligibleKeywords.length > 0) {
+    const runs = await db
+      .select({ query: searchRuns.query, requestedAt: searchRuns.requestedAt })
+      .from(searchRuns)
+      .where(
+        and(
+          eq(searchRuns.businessId, businessId),
+          inArray(
+            searchRuns.query,
+            eligibleKeywords.map((k) => k.phrase)
+          )
+        )
+      );
+
+    for (const run of runs) {
+      const key = run.query.trim().toLowerCase();
+      const at = new Date(run.requestedAt).getTime();
+      if (at > (lastCheckedAt.get(key) ?? 0)) lastCheckedAt.set(key, at);
+    }
+  }
+
+  const activeKeywords = [...eligibleKeywords]
+    .sort((a, b) => {
+      const aChecked = lastCheckedAt.get(a.phrase.trim().toLowerCase()) ?? 0;
+      const bChecked = lastCheckedAt.get(b.phrase.trim().toLowerCase()) ?? 0;
+      if (aChecked !== bChecked) return aChecked - bChecked; // never/least recently checked first
+      return b.opportunityScore - a.opportunityScore;
+    })
+    .slice(0, 10); // cap per refresh to respect quotas
+
+  // Keywords that have never been checked at all. `runRankSweep` loops on this
+  // to give a freshly onboarded business a complete ranking table automatically.
+  const uncheckedBefore = eligibleKeywords.filter(
+    (k) => !lastCheckedAt.has(k.phrase.trim().toLowerCase())
+  ).length;
 
   let refreshedCount = 0;
+  let observationsRecorded = 0;
+  let quotaExhausted = false;
+  const failures: Array<{ phrase: string; error: string }> = [];
 
   for (const kw of activeKeywords) {
     try {
@@ -264,7 +349,7 @@ export async function refreshKeywordRankings(params: {
         .from(searchResults)
         .where(eq(searchResults.searchRunId, runResult.run.id));
 
-      await recordRankingObservations({
+      const recorded = await recordRankingObservations({
         businessId,
         keywordId: kw.id,
         searchRunId: runResult.run.id,
@@ -275,10 +360,16 @@ export async function refreshKeywordRankings(params: {
           resultType: r.resultType,
         })),
       });
+      observationsRecorded += recorded.length;
 
       refreshedCount++;
-    } catch (err) {
+    } catch (err: any) {
+      // Never fail silently: the caller surfaces this so a quota/provider
+      // outage does not masquerade as "0 keywords refreshed" success.
+      const message = err?.message || String(err);
+      if (classifySearchError(err) !== 'other') quotaExhausted = true;
       console.warn(`Failed to refresh ranking for keyword "${kw.phrase}":`, err);
+      failures.push({ phrase: kw.phrase, error: message });
     }
   }
 
@@ -286,6 +377,98 @@ export async function refreshKeywordRankings(params: {
 
   return {
     refreshedCount,
+    failedCount: failures.length,
+    failures,
+    observationsRecorded,
+    // A failed query still leaves its `search_runs` row behind (the run is
+    // recorded before the provider is called), so both outcomes count as
+    // "checked" — otherwise one flaky phrase would keep the sweep retrying
+    // forever without ever completing coverage.
+    uncheckedRemaining: Math.max(0, uncheckedBefore - refreshedCount - failures.length),
+    quotaExhausted,
     details: updatedDetails,
+  };
+}
+
+export interface RankSweepResult {
+  passes: number;
+  keywordsChecked: number;
+  observationsRecorded: number;
+  failedCount: number;
+  failures: Array<{ phrase: string; error: string }>;
+  /** Monitored keywords still without any stored check once the sweep stopped. */
+  uncheckedRemaining: number;
+  quotaExhausted: boolean;
+  /** True when the wall-clock budget stopped the sweep before coverage completed. */
+  timedOut: boolean;
+}
+
+/**
+ * Runs back-to-back ranking passes until every monitored keyword has been
+ * checked at least once, or the per-sweep budget / search quota stops it.
+ *
+ * `refreshKeywordRankings` is capped at ten keywords per pass so a single
+ * request can never spend an unbounded number of searches; this loop is what
+ * lets the background scheduler produce a complete, pre-computed ranking table
+ * for a business without anyone pressing "Refresh Rankings".
+ */
+export async function runRankSweep(params: {
+  businessId: string;
+  workspaceId: string;
+  searchType?: 'google' | 'google_maps';
+  /** Hard cap on keywords checked in one sweep (10-100). */
+  maxKeywords?: number;
+  /** Hard cap on wall-clock time, so the job always finishes inside its lock. */
+  maxDurationMs?: number;
+}): Promise<RankSweepResult> {
+  const {
+    businessId,
+    workspaceId,
+    searchType = 'google',
+    maxKeywords = 60,
+    maxDurationMs = 3 * 60 * 1000,
+  } = params;
+  const budget = Math.max(10, Math.min(maxKeywords, 100));
+  const startedAt = Date.now();
+
+  let passes = 0;
+  let keywordsChecked = 0;
+  let observationsRecorded = 0;
+  let failedCount = 0;
+  let uncheckedRemaining = 0;
+  let quotaExhausted = false;
+  let timedOut = false;
+  const failures: Array<{ phrase: string; error: string }> = [];
+
+  while (keywordsChecked < budget && !quotaExhausted) {
+    if (Date.now() - startedAt > maxDurationMs) {
+      timedOut = true;
+      break;
+    }
+
+    const pass = await refreshKeywordRankings({ businessId, workspaceId, searchType });
+    passes++;
+    keywordsChecked += pass.refreshedCount;
+    observationsRecorded += pass.observationsRecorded;
+    failedCount += pass.failedCount;
+    failures.push(...pass.failures);
+    uncheckedRemaining = pass.uncheckedRemaining;
+    quotaExhausted = pass.quotaExhausted;
+
+    // Nothing left to check at all (no monitored keywords, or an empty pass).
+    if (pass.refreshedCount === 0 && pass.failedCount === 0) break;
+    // Every monitored keyword now has at least one stored check.
+    if (pass.uncheckedRemaining === 0) break;
+  }
+
+  return {
+    passes,
+    keywordsChecked,
+    observationsRecorded,
+    failedCount,
+    failures: failures.slice(0, 10),
+    uncheckedRemaining,
+    quotaExhausted,
+    timedOut,
   };
 }

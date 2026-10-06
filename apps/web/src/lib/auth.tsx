@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import { fetchApiJson } from './http';
 
 export interface User {
   id: string;
@@ -65,38 +66,45 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // background and clears state if the token has since been revoked.
         setIsLoaded(true);
 
-        // Verify token in background
-        fetch(`${API_BASE_URL}/api/auth/me`, {
-          headers: { Authorization: `Bearer ${storedToken}` },
-        })
-          .then((res) => res.json())
-          .then((data) => {
-            if (data.success && data.data?.user) {
-              const u = {
-                ...data.data.user,
-                imageUrl: data.data.user.avatarUrl || data.data.user.imageUrl || null,
+        // Verify token in background. Uses the defensive parser so a restarted
+        // API (plain-text 500 from the dev rewrite hop) is treated as "unknown"
+        // and keeps the cached session instead of throwing a JSON parse error.
+        void (async () => {
+          try {
+            const result = await fetchApiJson<{
+              user: User & { avatarUrl?: string | null };
+              workspaceId?: string;
+            }>(`${API_BASE_URL}/api/auth/me`, {
+              headers: { Authorization: `Bearer ${storedToken}` },
+            });
+
+            if (result.nonJson) return; // API unreachable/restarting: keep offline state
+
+            if (result.ok && result.data?.user) {
+              const u: User = {
+                ...result.data.user,
+                imageUrl: result.data.user.avatarUrl || result.data.user.imageUrl || null,
               };
               setUser(u);
-              if (data.data.workspaceId) {
-                setWorkspaceId(data.data.workspaceId);
-                localStorage.setItem('serp_scout_workspace_id', data.data.workspaceId);
+              if (result.data.workspaceId) {
+                setWorkspaceId(result.data.workspaceId);
+                localStorage.setItem('serp_scout_workspace_id', result.data.workspaceId);
               }
               localStorage.setItem('serp_scout_user', JSON.stringify(u));
             } else {
-              // Token invalid
+              // Token rejected by the API: clear the stale session.
               localStorage.removeItem('serp_scout_token');
               localStorage.removeItem('serp_scout_user');
               localStorage.removeItem('serp_scout_workspace_id');
               setToken(null);
               setUser(null);
             }
-          })
-          .catch(() => {
+          } catch {
             // Network error: keep existing offline state
-          })
-          .finally(() => {
+          } finally {
             setIsLoaded(true);
-          });
+          }
+        })();
         return;
       }
     } catch (e) {

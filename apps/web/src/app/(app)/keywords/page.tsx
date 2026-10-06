@@ -251,6 +251,22 @@ export default function KeywordsPage() {
     loadRadarHistory();
   }, [selectedBizId, loadKeywords, loadRadarHistory]);
 
+  // Keyword discovery and the research pipeline always write `candidate` rows,
+  // while the page opens on the "Tracked" tab — so a business with a full
+  // candidate queue rendered as "0 of N" and an empty table. Land on the tab
+  // that actually has data, once per business, and only when nothing is tracked.
+  const autoTabRef = React.useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (!selectedBizId || keywords.length === 0) return;
+    if (autoTabRef.current.has(selectedBizId)) return;
+    autoTabRef.current.add(selectedBizId);
+
+    const hasTracked = keywords.some(
+      (k) => k.keyword.status === 'tracking' || k.keyword.status === 'approved'
+    );
+    if (!hasTracked) setActiveTab('candidates');
+  }, [selectedBizId, keywords]);
+
   // Run Ranking Refresh
   const handleRefreshRankings = async () => {
     if (!selectedBizId) return;
@@ -260,7 +276,11 @@ export default function KeywordsPage() {
     try {
       const token = await getToken();
       if (!token) return;
-      const res = await apiClient<{ refreshedCount: number }>(
+      const res = await apiClient<{
+        refreshedCount: number;
+        failedCount?: number;
+        failures?: Array<{ phrase: string; error: string }>;
+      }>(
         `/api/businesses/${selectedBizId}/rankings/refresh`,
         {
           method: 'POST',
@@ -268,7 +288,15 @@ export default function KeywordsPage() {
           body: JSON.stringify({ searchType: 'google' }),
         }
       );
-      setSuccessMsg(`Refreshed rankings across ${res.refreshedCount} keywords.`);
+      const failed = res.failedCount ?? 0;
+      if (failed > 0) {
+        setError(
+          `Refreshed ${res.refreshedCount} keyword(s); ${failed} failed — e.g. "${res.failures?.[0]?.phrase}": ` +
+            `${res.failures?.[0]?.error ?? 'search provider error'}`
+        );
+      } else {
+        setSuccessMsg(`Refreshed rankings across ${res.refreshedCount} keywords.`);
+      }
       await loadKeywords();
     } catch (err: any) {
       console.error('Refresh error:', err);

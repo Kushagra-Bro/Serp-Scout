@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { fetchApiJson } from '@/lib/http';
 import {
   Sparkles,
   FileText,
@@ -98,20 +99,25 @@ export default function SharedReportPage({ params }: { params: { token: string }
     async function fetchSharedReport() {
       try {
         setLoading(true);
-        const res = await fetch(`${apiUrl}/api/shared/${params.token}`);
-        if (!res.ok) {
-          if (res.status === 410) {
+        // Defensive parse: a restarting API answers with plain text, which must
+        // not be reported to the visitor as an invalid or expired link.
+        const result = await fetchApiJson<{
+          share: { viewMode?: 'executive' | 'specialist' };
+          [key: string]: unknown;
+        }>(`${apiUrl}/api/shared/${params.token}`, { retries: 1 });
+
+        if (!result.ok || !result.data) {
+          if (result.status === 410) {
             throw new Error('This shared report link has expired.');
           }
-          throw new Error('Report not found or link is invalid.');
+          if (result.nonJson) {
+            throw new Error(result.error || 'The report service is not reachable right now.');
+          }
+          throw new Error(result.error || 'Report not found or link is invalid.');
         }
-        const json = await res.json();
-        if (json.success && json.data) {
-          setData(json.data);
-          setActiveMode(json.data.share.viewMode || 'executive');
-        } else {
-          throw new Error(json.error?.message || 'Failed to load report');
-        }
+
+        setData(result.data as any);
+        setActiveMode((result.data.share?.viewMode as 'executive' | 'specialist') || 'executive');
       } catch (err: any) {
         setError(err.message || 'Failed to load shared report');
       } finally {

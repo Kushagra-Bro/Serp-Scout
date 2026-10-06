@@ -17,7 +17,7 @@ import {
   SerpApiResearchGateway,
   assertBusinessInWorkspace,
 } from '../../services/research-gateway.service.js';
-import { redisConnection } from '../queues.js';
+import { redisConnection, researchQueue } from '../queues.js';
 import { env } from '../../config/env.js';
 import { classifySearchError } from '../../lib/search-errors.js';
 
@@ -279,9 +279,28 @@ export async function executeResearchGraphRun(data: ResearchGraphJobData) {
     }
   }
 
+  // ── Hand off to the ranking sweep ──────────────────────────────────────────
+  // Keyword discovery just produced (or refreshed) the phrases to monitor, and
+  // the graph itself never records positions. Queueing the sweep here means a
+  // newly onboarded business ends up with a populated Keywords page on its own.
+  let rankSweepJobId: string | null = null;
+  try {
+    const sweepJob = await researchQueue.add(
+      'rank-sweep',
+      { businessId, workspaceId },
+      { deduplication: { id: `rank-sweep:${businessId}:${Math.floor(Date.now() / 600000)}` } }
+    );
+    rankSweepJobId = sweepJob.id ? String(sweepJob.id) : null;
+  } catch (err: any) {
+    // A queueing hiccup must not fail the research run: the freshness
+    // reconciler picks the business up on its next pass regardless.
+    console.warn(`[ResearchGraphWorker] Could not queue rank sweep for ${businessId}: ${err?.message || err}`);
+  }
+
   return {
     businessId,
     reportId,
+    rankSweepJobId,
     counts: {
       competitors: savedCompetitors,
       keywords: newKeywords.length,

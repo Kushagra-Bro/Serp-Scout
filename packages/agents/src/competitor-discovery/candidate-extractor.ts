@@ -60,14 +60,23 @@ export function extractCompetitorCandidates(
       longitude = (organic.raw as any)?.gps_coordinates?.longitude;
     } else {
       const maps = item as NormalizedMapsResult;
-      url = maps.website || (maps.raw?.link as string) || '';
-      mapsUrl = maps.raw?.link as string;
+      // Maps items reach this extractor in two shapes:
+      //   1. the live SerpApi NormalizedMapsResult (`website`, `latitude`, ...)
+      //   2. a row rehydrated from `search_results` by the discover route, which
+      //      only carries the normalized `url` plus the untouched provider
+      //      payload under `raw`.
+      // Reading both matters: SerpApi's google_maps payload exposes the site as
+      // `website` and never as `link`, so a row-shape-only lookup silently
+      // discarded every 3-Pack candidate as "no website".
+      const raw = (maps.raw ?? {}) as Record<string, any>;
+      url = maps.website || (item as any).url || raw.website || raw.link || '';
+      mapsUrl = raw.place_id_search || raw.link || undefined;
       rating = maps.rating;
       reviewsCount = maps.reviewsCount;
       address = maps.address;
-      category = maps.category;
-      latitude = maps.latitude || (maps.raw as any)?.gps_coordinates?.latitude;
-      longitude = maps.longitude || (maps.raw as any)?.gps_coordinates?.longitude;
+      category = maps.category || raw.type || undefined;
+      latitude = maps.latitude || raw.gps_coordinates?.latitude;
+      longitude = maps.longitude || raw.gps_coordinates?.longitude;
     }
 
     if (!url) continue;

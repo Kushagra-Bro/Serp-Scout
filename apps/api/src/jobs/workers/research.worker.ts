@@ -1,9 +1,9 @@
 import { Worker, Job } from 'bullmq';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { db, businesses, services, keywords, workspaces, rankingObservations } from '../../db/index.js';
 import { analyzeWebsite } from '@serp-scout/agents';
-import { redisConnection, reportQueue } from '../queues.js';
-import { refreshKeywordRankings } from '../../services/ranking.service.js';
+import { redisConnection, reportQueue, researchQueue } from '../queues.js';
+import { runRankSweep } from '../../services/ranking.service.js';
 import { classifySearchError } from '../../lib/search-errors.js';
 
 export interface WebsiteAnalysisJobData {
@@ -35,17 +35,30 @@ export async function executeResearchRun(data: ResearchRunJobData) {
     throw new Error(`Business ${businessId} not found`);
   }
 
-  // 2. Refresh keyword rankings & record observations
+  // 2. Refresh keyword rankings & record observations. A full sweep walks every
+  // monitored keyword (ten per pass) so the ranking table is complete rather
+  // than only the first ten rows of it.
   console.log(`[ResearchWorker] Refreshing keyword rankings for business ${business.name}...`);
   let observationsRecorded = 0;
   let quotaExhausted = false;
   try {
-    const refreshResult = await refreshKeywordRankings({
+    const sweep = await runRankSweep({
       businessId,
       workspaceId,
       searchType: 'google',
     });
-    observationsRecorded = refreshResult.refreshedCount;
+    observationsRecorded = sweep.observationsRecorded;
+    quotaExhausted = sweep.quotaExhausted;
+    console.log(
+      `[ResearchWorker] Rank sweep: ${sweep.keywordsChecked} keyword(s) checked in ${sweep.passes} pass(es), ` +
+        `${sweep.observationsRecorded} observation(s) recorded, ${sweep.uncheckedRemaining} keyword(s) still unchecked, ` +
+        `${sweep.failedCount} failure(s)${sweep.timedOut ? ', stopped on the time budget' : ''}.`
+    );
+    if (sweep.failedCount > 0) {
+      console.warn(
+        `[ResearchWorker] First sweep failure for "${business.name}": "${sweep.failures[0]?.phrase}" — ${sweep.failures[0]?.error}`
+      );
+    }
   } catch (err: any) {
     if (classifySearchError(err) !== 'other') {
       // Workspace meter or upstream provider is out of quota: don't retry here,
@@ -107,6 +120,71 @@ export async function executeResearchRun(data: ResearchRunJobData) {
     observationsRecorded,
     freshAt: now.toISOString(),
     reportJobId,
+  };
+}
+
+export interface RankSweepJobData {
+  businessId: string;
+  workspaceId: string;
+}
+
+/**
+ * Lightweight background ranking sweep.
+ *
+ * Enqueued on business creation (right after keyword discovery) and by the
+ * rank-freshness reconciler, so the Keywords page renders pre-computed positions
+ * instead of waiting for someone to press "Refresh Rankings". Unlike a full
+ * research run it never spends LLM calls on a report.
+ */
+export async function executeRankSweep(data: RankSweepJobData) {
+  const { businessId, workspaceId } = data;
+
+  const [business] = await db
+    .select()
+    .from(businesses)
+    .where(and(eq(businesses.id, businessId), eq(businesses.workspaceId, workspaceId)))
+    .limit(1);
+
+  if (!business) {
+    throw new Error(`Business ${businessId} not found in workspace ${workspaceId}`);
+  }
+
+  const sweep = await runRankSweep({ businessId, workspaceId, searchType: 'google' });
+
+  console.log(
+    `[RankSweep] "${business.name}": ${sweep.keywordsChecked} keyword(s) in ${sweep.passes} pass(es), ` +
+      `${sweep.observationsRecorded} observation(s), ${sweep.uncheckedRemaining} unchecked, ` +
+      `${sweep.failedCount} failure(s)${sweep.timedOut ? ', stopped on the time budget' : ''}.`
+  );
+
+  // Only claim freshness once every monitored keyword has a stored check.
+  // Otherwise leave `lastAnalyzedAt` untouched so the reconcilers keep filling
+  // the table in (the ranking table is what the user actually looks at).
+  const coverageComplete = sweep.uncheckedRemaining === 0 && !sweep.quotaExhausted && !sweep.timedOut;
+
+  if (coverageComplete) {
+    await db
+      .update(businesses)
+      .set({ lastAnalyzedAt: new Date(), dataStale: false, updatedAt: new Date() })
+      .where(eq(businesses.id, businessId));
+  } else if (sweep.quotaExhausted) {
+    await db
+      .update(businesses)
+      .set({ dataStale: true, updatedAt: new Date() })
+      .where(eq(businesses.id, businessId));
+  }
+
+  return {
+    businessId,
+    passes: sweep.passes,
+    keywordsChecked: sweep.keywordsChecked,
+    observationsRecorded: sweep.observationsRecorded,
+    uncheckedRemaining: sweep.uncheckedRemaining,
+    failedCount: sweep.failedCount,
+    failures: sweep.failures,
+    quotaExhausted: sweep.quotaExhausted,
+    timedOut: sweep.timedOut,
+    coverageComplete,
   };
 }
 
@@ -190,6 +268,18 @@ export async function executeWebsiteAnalysis(data: WebsiteAnalysisJobData) {
     if (newKeywordsToInsert.length > 0) {
       await db.insert(keywords).values(newKeywordsToInsert);
     }
+  }
+
+  // 6. Hand off to the ranking sweep so the positions behind those keywords are
+  // computed in the background instead of on the user's next click.
+  try {
+    await researchQueue.add(
+      'rank-sweep',
+      { businessId, workspaceId: business.workspaceId },
+      { deduplication: { id: `rank-sweep:${businessId}:${Math.floor(Date.now() / 600000)}` } }
+    );
+  } catch (err: any) {
+    console.warn(`[WebsiteAnalysis] Could not queue rank sweep for ${businessId}: ${err?.message || err}`);
   }
 
   return analysis;

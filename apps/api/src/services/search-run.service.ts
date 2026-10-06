@@ -14,6 +14,7 @@ import {
 import { searchTavily } from './tavily.service.js';
 import { MarketShiftService } from './market-shift.service.js';
 import { env } from '../config/env.js';
+import { clampText } from '../lib/text.js';
 
 export interface ExecuteSearchOptions {
   businessId: string;
@@ -115,7 +116,7 @@ export async function executeSearchRun(options: ExecuteSearchOptions) {
       provider: actualProvider,
       searchType,
       query,
-      location: location || business.city || undefined,
+      location: clampText(location || business.city || undefined, 255),
       language,
       device,
       costUnits,
@@ -257,8 +258,8 @@ export async function executeSearchRun(options: ExecuteSearchOptions) {
           rank: item.rank,
           title: item.title,
           url: item.url,
-          domain: item.domain || 'unknown',
-          businessName: item.businessName,
+          domain: clampText(item.domain || 'unknown', 255) || 'unknown',
+          businessName: clampText(item.businessName, 255),
           snippet: item.snippet,
           rating: item.rating ? String(item.rating) : undefined,
           reviewCount: item.reviewCount,

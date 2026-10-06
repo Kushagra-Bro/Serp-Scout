@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth';
+import { fetchApiJson } from '@/lib/http';
 import { Mail, Lock, ArrowRight, AlertCircle, Loader2 } from 'lucide-react';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
@@ -22,18 +23,21 @@ export default function SignInPage() {
     setError(null);
 
     try {
-      const res = await fetch(`${API_BASE_URL}/api/auth/sign-in`, {
+      const result = await fetchApiJson<{
+        token: string;
+        user: { id: string; name: string; email: string; role?: string };
+        workspaceId?: string;
+      }>(`${API_BASE_URL}/api/auth/sign-in`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
       });
 
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        throw new Error(data.error?.message || 'Invalid email or password');
+      if (!result.ok || !result.data) {
+        throw new Error(result.error || 'Invalid email or password');
       }
 
-      signIn(data.data.token, data.data.user, data.data.workspaceId);
+      signIn(result.data.token, result.data.user as any, result.data.workspaceId);
       router.push('/app');
     } catch (err: any) {
       setError(err.message || 'Failed to sign in');

@@ -5,6 +5,8 @@ import {
   WebsiteAnalysisJobData,
   executeResearchRun,
   ResearchRunJobData,
+  executeRankSweep,
+  RankSweepJobData,
 } from './research.worker.js';
 import { executeReportGeneration, ReportJobData } from './report.worker.js';
 import { executeResearchGraphRun, ResearchGraphJobData } from './research-graph.worker.js';
@@ -81,6 +83,11 @@ export function startCadenceWorker() {
           case 'catch-up-refresh':
           case 'research-run':
             return await executeResearchRun(job.data as ResearchRunJobData);
+
+          // Ranking-only sweeps: the automation that keeps the Keywords page
+          // populated without a manual "Refresh Rankings" click.
+          case 'rank-sweep':
+            return await executeRankSweep(job.data as RankSweepJobData);
 
           case 'generate-report':
           case 'weekly-report':

@@ -15,6 +15,7 @@ import type { ResearchSearchGateway } from '@serp-scout/agents';
 import type { NormalizedSearchResult, NormalizedNewsResult } from '@serp-scout/types';
 import { searchTavily } from './tavily.service.js';
 import { env } from '../config/env.js';
+import { clampText } from '../lib/text.js';
 
 /**
  * SerpApi-backed implementation of the research graph's search gateway.
@@ -60,7 +61,7 @@ export class SerpApiResearchGateway implements ResearchSearchGateway {
         provider,
         searchType,
         query,
-        location: this.location,
+        location: clampText(this.location, 255),
         costUnits: provider === 'tavily' ? 0 : 1,
         status: 'pending',
       })
@@ -81,8 +82,8 @@ export class SerpApiResearchGateway implements ResearchSearchGateway {
           rank: r.rank,
           title: r.title,
           url: r.url,
-          domain: r.domain || 'unknown',
-          businessName: r.businessName,
+          domain: clampText(r.domain || 'unknown', 255) || 'unknown',
+          businessName: clampText(r.businessName, 255),
           snippet: r.snippet,
           rating: r.rating,
           reviewCount: r.reviewCount,

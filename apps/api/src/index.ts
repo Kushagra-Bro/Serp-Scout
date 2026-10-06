@@ -18,6 +18,7 @@ import { startMainJobWorker } from './jobs/workers/main.worker.js';
 import { startSystemTimers } from './jobs/system-timers.js';
 import { syncAllWorkspaceSchedules } from './jobs/scheduler.js';
 import { runCatchUpReconciliation } from './jobs/catchup.js';
+import { runRankFreshnessReconciliation } from './jobs/rank-freshness.js';
 import { allQueues, redisConnection, getRedisStats } from './jobs/queues.js';
 import { createGracefulShutdown } from './graceful-shutdown.js';
 
@@ -37,7 +38,14 @@ app.get('/health', (_req, res) => {
     status: 'ok',
     service: 'serp-scout-api',
     environment: env.NODE_ENV,
-    redis: getRedisStats(),
+    // `connected` is the live socket state: while it is false the queue is
+    // retrying, and endpoints that read the queue report empty results quickly
+    // rather than hanging (see lib/async-timeout.ts).
+    redis: {
+      ...getRedisStats(),
+      connected: redisConnection.status === 'ready',
+      status: redisConnection.status,
+    },
     timestamp: new Date().toISOString(),
   });
 });
@@ -113,6 +121,18 @@ if (env.NODE_ENV !== 'test') {
     })
     .catch((err) => {
       console.error('[CatchUp] Boot reconciliation failed:', err);
+    })
+    // Ranking freshness is reconciled on boot too: positions that went stale
+    // while the process was down are re-swept before the user opens the page.
+    .then(() => runRankFreshnessReconciliation())
+    .then((r) => {
+      console.log(
+        `[RankFreshness] Boot reconciliation: checked ${r.checked}, enqueued ${r.enqueued}, ` +
+          `manual ${r.skippedManual}, awaiting keyword discovery ${r.missingKeywords}.`
+      );
+    })
+    .catch((err) => {
+      console.error('[RankFreshness] Boot reconciliation failed:', err);
     });
   console.log('👷 All BullMQ Workers & background timers initialized');
 }

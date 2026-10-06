@@ -1,6 +1,6 @@
 import { Router, Response } from 'express';
 import { z } from 'zod';
-import { eq, and, desc } from 'drizzle-orm';
+import { eq, and, desc, inArray } from 'drizzle-orm';
 import {
   db,
   businesses,
@@ -90,10 +90,13 @@ router.post(
       let serpTitles: string[] = [];
 
       if (runIds.length > 0) {
+        // Scope by run id list: `and(...[])` collapses to no WHERE clause at all,
+        // which fed keyword discovery with SERP titles from every other business
+        // in the table as soon as the business had more than one stored run.
         const results = await db
           .select({ title: searchResults.title })
           .from(searchResults)
-          .where(and(...(runIds.length === 1 ? [eq(searchResults.searchRunId, runIds[0])] : [])))
+          .where(inArray(searchResults.searchRunId, runIds))
           .limit(50);
         serpTitles = results.map((r) => r.title);
       }

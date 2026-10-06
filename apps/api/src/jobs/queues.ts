@@ -11,6 +11,7 @@ try {
 }
 
 import { computeRedisBudget } from '../lib/redis-telemetry.js';
+import { withTimeoutFallback, QUEUE_OP_TIMEOUT_MS } from '../lib/async-timeout.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Redis Command Telemetry (tracks usage against 500k/month budget)
@@ -166,11 +167,14 @@ export async function getRecentJobs(workspaceId?: string): Promise<UnifiedJobInf
 
   try {
     for (const queue of allQueues) {
+      // Every one of these is a Redis round-trip on a connection that retries
+      // forever, so each is bounded: a Redis outage must make this endpoint
+      // report "no jobs yet" rather than hang the UI's polling loop.
       const [active, waiting, completed, failed] = await Promise.all([
-        queue.getActive(0, 10),
-        queue.getWaiting(0, 10),
-        queue.getCompleted(0, 15),
-        queue.getFailed(0, 15),
+        withTimeoutFallback(queue.getActive(0, 10), QUEUE_OP_TIMEOUT_MS, [] as Job[], `${queue.name}.getActive`),
+        withTimeoutFallback(queue.getWaiting(0, 10), QUEUE_OP_TIMEOUT_MS, [] as Job[], `${queue.name}.getWaiting`),
+        withTimeoutFallback(queue.getCompleted(0, 15), QUEUE_OP_TIMEOUT_MS, [] as Job[], `${queue.name}.getCompleted`),
+        withTimeoutFallback(queue.getFailed(0, 15), QUEUE_OP_TIMEOUT_MS, [] as Job[], `${queue.name}.getFailed`),
       ]);
 
       const jobs: Job[] = [...active, ...waiting, ...completed, ...failed];
@@ -182,7 +186,12 @@ export async function getRecentJobs(workspaceId?: string): Promise<UnifiedJobInf
           continue;
         }
 
-        const state = await job.getState();
+        const state = await withTimeoutFallback(
+          job.getState(),
+          QUEUE_OP_TIMEOUT_MS,
+          'unknown',
+          `${queue.name}.jobState`
+        );
         results.push({
           id: String(job.id),
           queue: queue.name,

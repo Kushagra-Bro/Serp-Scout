@@ -9,7 +9,7 @@ import {
 } from '../db/index.js';
 import { WorkspaceRequest } from '../middleware/workspace.js';
 import { isSameWebsiteUrl } from '../lib/website-url.js';
-import { websiteAnalysisQueue } from '../jobs/queues.js';
+import { websiteAnalysisQueue, researchGraphQueue } from '../jobs/queues.js';
 
 import { env } from '../config/env.js';
 
@@ -272,12 +272,31 @@ router.post('/', async (req: WorkspaceRequest, res: Response): Promise<void> => 
         .returning();
     }
 
+    // Kick off the research pipeline right away: it analyses the website,
+    // discovers the competitor set and the keyword list to monitor, and then
+    // hands off to a ranking sweep. This is what makes a brand-new profile's
+    // Keywords/Competitors views pre-computed rather than empty until someone
+    // presses a button. A queueing failure must not fail the creation itself —
+    // the rank-freshness reconciler picks the business up on its next pass.
+    let researchJobId: string | null = null;
+    try {
+      const job = await researchGraphQueue.add(
+        'run-research-graph',
+        { businessId: newBusiness.id, workspaceId: workspace.id, persistReport: true },
+        { deduplication: { id: `onboard:${newBusiness.id}` } }
+      );
+      researchJobId = job.id ? String(job.id) : null;
+    } catch (err) {
+      console.warn('Could not queue the onboarding research run:', err);
+    }
+
     res.status(201).json({
       success: true,
       data: {
         ...newBusiness,
         locations: insertedLocations,
         services: insertedServices,
+        researchJobId,
       },
     });
   } catch (err) {

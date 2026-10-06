@@ -2,6 +2,7 @@ import { Job } from 'bullmq';
 import { eq } from 'drizzle-orm';
 import { researchQueue } from './queues.js';
 import { db, workspaces, businesses } from '../db/index.js';
+import { withTimeoutFallback, QUEUE_OP_TIMEOUT_MS } from '../lib/async-timeout.js';
 
 /**
  * Catch-up reconciliation.
@@ -84,11 +85,13 @@ function jobDueAt(job: Job): number {
  * tomorrow's-schedule cannot mask genuinely overdue data.
  */
 async function getImminentBusinessIds(now: Date): Promise<Set<string>> {
+  // Bounded: with Redis unreachable these would never settle, and the whole
+  // reconciliation pass would stall instead of letting the sweep retry later.
   const [active, waiting, prioritized, delayed] = await Promise.all([
-    researchQueue.getJobs(['active']),
-    researchQueue.getJobs(['waiting']),
-    researchQueue.getJobs(['prioritized']),
-    researchQueue.getJobs(['delayed']),
+    withTimeoutFallback(researchQueue.getJobs(['active']), QUEUE_OP_TIMEOUT_MS, [] as Job[], 'catchup.getActive'),
+    withTimeoutFallback(researchQueue.getJobs(['waiting']), QUEUE_OP_TIMEOUT_MS, [] as Job[], 'catchup.getWaiting'),
+    withTimeoutFallback(researchQueue.getJobs(['prioritized']), QUEUE_OP_TIMEOUT_MS, [] as Job[], 'catchup.getPrioritized'),
+    withTimeoutFallback(researchQueue.getJobs(['delayed']), QUEUE_OP_TIMEOUT_MS, [] as Job[], 'catchup.getDelayed'),
   ]);
 
   const ids = new Set<string>();
@@ -171,19 +174,32 @@ export async function runCatchUpReconciliation(now: Date = new Date()): Promise<
       continue;
     }
 
-    await researchQueue.add(
-      'catch-up-refresh',
-      {
-        businessId: row.businessId,
-        workspaceId: row.workspaceId,
-        triggerReport: true,
-      },
-      {
-        // Dedupes concurrent boots / the 6h timer / multi-replica deployments
-        // without ever blocking future runs after this one finishes.
-        deduplication: { id: `catchup:${row.businessId}` },
-      }
+    const enqueued = await withTimeoutFallback(
+      researchQueue
+        .add(
+          'catch-up-refresh',
+          {
+            businessId: row.businessId,
+            workspaceId: row.workspaceId,
+            triggerReport: true,
+          },
+          {
+            // Dedupes concurrent boots / the 6h timer / multi-replica deployments
+            // without ever blocking future runs after this one finishes.
+            deduplication: { id: `catchup:${row.businessId}` },
+          }
+        )
+        .then(() => true)
+        .catch((err: any) => {
+          console.warn(`[CatchUp] Could not enqueue refresh for "${row.businessName}": ${err?.message || err}`);
+          return false;
+        }),
+      QUEUE_OP_TIMEOUT_MS,
+      false,
+      'catchup.add'
     );
+
+    if (!enqueued) continue;
 
     result.enqueued++;
     result.enqueuedBusinessIds.push(row.businessId);

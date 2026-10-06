@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth';
+import { fetchApiJson } from '@/lib/http';
 import { Mail, Lock, User, Building, ArrowRight, AlertCircle, Loader2 } from 'lucide-react';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
@@ -24,18 +25,21 @@ export default function SignUpPage() {
     setError(null);
 
     try {
-      const res = await fetch(`${API_BASE_URL}/api/auth/sign-up`, {
+      const result = await fetchApiJson<{
+        token: string;
+        user: { id: string; name: string; email: string; role?: string };
+        workspace: { id: string; name: string };
+      }>(`${API_BASE_URL}/api/auth/sign-up`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, email, password, workspaceName }),
       });
 
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        throw new Error(data.error?.message || 'Failed to create account');
+      if (!result.ok || !result.data) {
+        throw new Error(result.error || 'Failed to create account');
       }
 
-      signIn(data.data.token, data.data.user, data.data.workspace.id);
+      signIn(result.data.token, result.data.user as any, result.data.workspace.id);
       router.push('/onboarding');
     } catch (err: any) {
       setError(err.message || 'Registration failed');

@@ -61,7 +61,14 @@ export async function searchTavily(
         try {
           domain = new URL(item.url || '').hostname.replace(/^www\./, '');
         } catch {
-          domain = item.url || '';
+          // Never fall back to the raw URL: `domain` is stored in a varchar(255)
+          // column (an over-long URL overflows the insert and kills the whole
+          // run) and a URL is not a domain for rank matching either.
+          domain = (item.url || '')
+            .replace(/^[a-z][a-z0-9+.-]*:\/\//i, '')
+            .split('/')[0]
+            .split('?')[0]
+            .replace(/^www\./, '');
         }
 
         results.push({
