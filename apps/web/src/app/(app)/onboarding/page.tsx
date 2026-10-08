@@ -519,6 +519,7 @@ export default function OnboardingPage() {
       });
 
       const createdBusinessId = bizRes?.id || bizRes?.data?.id;
+      const researchJobId = bizRes?.researchJobId || bizRes?.data?.researchJobId || null;
 
       // 4. Automatically trigger website analysis in the background
       let jobId: string | null = null;
@@ -537,6 +538,10 @@ export default function OnboardingPage() {
           console.warn('Auto-analysis background dispatch notice:', analyzeErr);
         }
       }
+
+      // #region agent log
+      fetch('http://127.0.0.1:7537/ingest/08159c05-3a23-4a09-bfe4-16a226612021',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'97920a'},body:JSON.stringify({sessionId:'97920a',runId:'pre-fix',hypothesisId:'A',location:'onboarding/page.tsx:create',message:'Business created; jobs queued',data:{createdBusinessId,researchJobId,analyzeJobId:jobId,willPassJobIdToOverview:Boolean(jobId)},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
 
       // 5. Route to overview dashboard with auto-analysis parameters
       if (typeof window !== 'undefined' && createdBusinessId) {

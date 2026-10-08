@@ -286,6 +286,9 @@ router.post('/', async (req: WorkspaceRequest, res: Response): Promise<void> => 
         { deduplication: { id: `onboard:${newBusiness.id}` } }
       );
       researchJobId = job.id ? String(job.id) : null;
+      // #region agent log
+      fetch('http://127.0.0.1:7537/ingest/08159c05-3a23-4a09-bfe4-16a226612021',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'97920a'},body:JSON.stringify({sessionId:'97920a',runId:'pre-fix',hypothesisId:'E',location:'businesses.ts:create',message:'Queued onboarding research-graph job',data:{businessId:newBusiness.id,researchJobId},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
     } catch (err) {
       console.warn('Could not queue the onboarding research run:', err);
     }

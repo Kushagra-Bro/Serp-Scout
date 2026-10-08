@@ -26,7 +26,15 @@ const app = express();
 
 app.use(
   cors({
-    origin: [env.FRONTEND_URL, 'http://localhost:3000'],
+    // `localhost` and `127.0.0.1` are distinct origins to a browser, so a dev
+    // server reached over the IP form would have every API call blocked by CORS.
+    origin: [
+      env.FRONTEND_URL,
+      'http://localhost:3000',
+      'http://127.0.0.1:3000',
+      'http://localhost:3001',
+      'http://127.0.0.1:3001',
+    ],
     credentials: true,
   })
 );

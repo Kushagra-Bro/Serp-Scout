@@ -39,6 +39,10 @@ interface KeywordRankingDetail {
   url: string | null;
   serpFeatures: string[] | null;
   lastObservedAt: string | null;
+  /** When the phrase was last swept, whether or not the business appeared. */
+  lastCheckedAt?: string | null;
+  /** Newest sweep found no position for this business (not the same as never checked). */
+  absentFromLatestCheck?: boolean;
   bestCompetitorRank: number | null;
   bestCompetitorDomain: string | null;
 }
@@ -219,7 +223,14 @@ export default function KeywordsPage() {
       // Auto-trigger discovery if 0 keywords exist for this business
       if (data.length === 0 && !autoTriggeredKeywordsRef.current.has(selectedBizId)) {
         autoTriggeredKeywordsRef.current.add(selectedBizId);
+        // #region agent log
+        fetch('http://127.0.0.1:7537/ingest/08159c05-3a23-4a09-bfe4-16a226612021',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'97920a'},body:JSON.stringify({sessionId:'97920a',runId:'pre-fix',hypothesisId:'D',location:'keywords/page.tsx:loadKeywords',message:'Keywords tab mounted; auto-discover because empty',data:{selectedBizId,kwCount:data.length},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
         handleDiscoverKeywords(selectedBizId);
+      } else {
+        // #region agent log
+        fetch('http://127.0.0.1:7537/ingest/08159c05-3a23-4a09-bfe4-16a226612021',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'97920a'},body:JSON.stringify({sessionId:'97920a',runId:'pre-fix',hypothesisId:'D',location:'keywords/page.tsx:loadKeywords',message:'Keywords tab mounted; using existing rows',data:{selectedBizId,kwCount:data.length,alreadyAutoTriggered:autoTriggeredKeywordsRef.current.has(selectedBizId)},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
       }
     } catch (err: any) {
       console.error('Failed to load keywords:', err);
@@ -711,8 +722,24 @@ export default function KeywordsPage() {
                             >
                               #{item.currentRank}
                             </span>
+                          ) : item.absentFromLatestCheck ? (
+                            // Checked, but the newest sweep found no position for
+                            // this business — distinct from "never checked".
+                            <span
+                              className="inline-block px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200"
+                              title={
+                                item.previousRank
+                                  ? `Last seen at #${item.previousRank}. Not present in the most recent sweep.`
+                                  : 'Not present in the most recent sweep.'
+                              }
+                            >
+                              not in top 20
+                              {item.previousRank ? <span className="block text-[9px] text-amber-600">was #{item.previousRank}</span> : null}
+                            </span>
                           ) : (
-                            <span className="text-slate-300 font-mono text-xs">—</span>
+                            <span className="text-slate-300 font-mono text-xs" title="No sweep has covered this phrase yet">
+                              —
+                            </span>
                           )}
                         </td>
 

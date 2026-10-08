@@ -17,6 +17,7 @@ import {
   generateWeeklyReport,
 } from '@serp-scout/agents';
 import { generateReportPdf } from '../../services/pdf.service.js';
+import { buildDetailedReport } from '../../services/report-bundle.service.js';
 import { NotificationService } from '../../services/notification.service.js';
 import { redisConnection } from '../queues.js';
 
@@ -54,7 +55,9 @@ export async function executeReportGeneration(data: ReportJobData) {
     .where(eq(services.businessId, businessId));
   const serviceNames = bizServices.length > 0 ? bizServices.map((s) => s.name) : ['General Services'];
 
-  // 3. Fetch tracked keywords and their recent ranking observations
+  // 3. Fetch tracked keywords and competitor benchmarks.
+  //    (The ranking history itself is assembled in step 5 from the business's own
+  //    positions per check — see buildDetailedReport.)
   const trackedKeywords = await db
     .select()
     .from(keywords)
@@ -65,41 +68,6 @@ export async function executeReportGeneration(data: ReportJobData) {
     .select()
     .from(competitors)
     .where(eq(competitors.businessId, businessId));
-
-  const rankingChanges = [];
-  for (const kw of trackedKeywords) {
-    const obs = await db
-      .select()
-      .from(rankingObservations)
-      .where(eq(rankingObservations.keywordId, kw.id))
-      .orderBy(desc(rankingObservations.observedAt))
-      .limit(2);
-
-    const currentRank = obs[0]?.rank ?? null;
-    const previousRank = obs[1]?.rank ?? null;
-    const delta =
-      currentRank !== null && previousRank !== null
-        ? previousRank - currentRank // positive delta = rank improved
-        : null;
-
-    // Find the best competitor rank for this keyword from real data
-    const competitorRanks = competitorList
-      .map((c) => (c.metadata as any)?.keywordRanks?.[kw.phrase])
-      .filter((r): r is number => typeof r === 'number' && r > 0);
-    const bestCompetitorRank = competitorRanks.length > 0 ? Math.min(...competitorRanks) : null;
-    const bestCompetitor = competitorList.find(
-      (c) => (c.metadata as any)?.keywordRanks?.[kw.phrase] === bestCompetitorRank
-    );
-
-    rankingChanges.push({
-      phrase: kw.phrase,
-      currentRank,
-      previousRank,
-      delta,
-      bestCompetitorRank,
-      bestCompetitorDomain: bestCompetitor?.domain || null,
-    });
-  }
 
   // 4. Fetch content gaps
   const existingGaps = await db
@@ -130,10 +98,38 @@ export async function executeReportGeneration(data: ReportJobData) {
     };
   });
 
-  const periodStart = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-  const periodEnd = new Date().toISOString();
+  const periodStart = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+  const periodEnd = new Date();
 
-  // 5. Generate structured report document with prioritized 3-5 actions
+  // 5. Assemble the detailed report material first: the ranking section must be
+  //    built from the business's own positions per check. Reading the two newest
+  //    ranking_observations rows directly (as this worker used to) mixed
+  //    competitor rows into the business's previous rank and produced nothing at
+  //    all for keywords where the business does not rank.
+  const detailedSections = await buildDetailedReport({
+    businessId,
+    periodStart,
+    periodEnd,
+  });
+
+  const allShiftRows = [
+    ...detailedSections.rankingShifts.movers,
+    ...detailedSections.rankingShifts.unchanged,
+    ...detailedSections.rankingShifts.newEntries,
+    ...detailedSections.rankingShifts.droppedOut,
+    ...detailedSections.rankingShifts.notRanking,
+  ];
+
+  const rankingChanges = allShiftRows.map((row) => ({
+    phrase: row.keyword,
+    currentRank: row.currentRank,
+    previousRank: row.previousRank,
+    delta: row.shift,
+    bestCompetitorRank: row.bestCompetitorRank,
+    bestCompetitorDomain: row.bestCompetitorDomain,
+  }));
+
+  // 6. Generate structured report document with prioritized 3-5 actions
   const generatedReport = await generateWeeklyReport({
     business: {
       name: business.name,
@@ -142,25 +138,43 @@ export async function executeReportGeneration(data: ReportJobData) {
       city: business.city || undefined,
     },
     keywordRankings: rankingChanges,
-    contentGaps: mappedGaps,
-    periodStart,
-    periodEnd,
+    contentGaps: detailedSections.actions.length >= 0 ? mappedGaps : mappedGaps,
+    competitorChanges: detailedSections.competitors.slice(0, 5).map((c) => {
+      const bits = [`${c.name} (${c.domain})`, `type ${c.competitorType}`, `${c.confidenceScore}% match`];
+      if (c.threatLevel) bits.push(`${c.threatLevel} threat`);
+      if (c.reviewCount !== null) bits.push(`${c.reviewCount} reviews`);
+      if (c.rating !== null) bits.push(`${c.rating.toFixed(1)}★`);
+      return bits.join(' · ');
+    }),
+    periodStart: periodStart.toISOString(),
+    periodEnd: periodEnd.toISOString(),
   });
 
-  // 6. Save report in Neon DB
+  // Attach the detailed sections (KPI dashboard, ranking shifts, competitor
+  // landscape, reputation, local presence, evidence, methodology).
+  const reportSummary = {
+    ...generatedReport,
+    detailed: {
+      ...detailedSections,
+      actions: generatedReport.actionPlan.length > 0 ? generatedReport.actionPlan : detailedSections.actions,
+    },
+  };
+
+  // 7. Save report in Neon DB
   const [newReport] = await db
     .insert(reports)
     .values({
       businessId,
-      periodStart: new Date(periodStart),
-      periodEnd: new Date(periodEnd),
-      summary: generatedReport as any,
+      periodStart,
+      periodEnd,
+      summary: reportSummary as any,
       status: 'published',
       generatedAt: new Date(),
     })
     .returning();
 
-  // 7. Save recommendations & evidence
+  // 8. Save recommendations & evidence
+  const savedRecs: Array<{ id: string; title: string }> = [];
   for (const action of generatedReport.actionPlan) {
     const steps = action.implementationSteps && action.implementationSteps.length > 0
       ? action.implementationSteps
@@ -206,21 +220,22 @@ export async function executeReportGeneration(data: ReportJobData) {
     }
   }
 
-  // 8. Generate PDF preview buffer
+  // 9. Generate the PDF preview from the detailed document (same content the
+  //    download endpoint produces, so the emailed and downloaded reports match).
   try {
     const pdfBuffer = await generateReportPdf({
       businessName: business.name,
       websiteUrl: business.websiteUrl,
-      periodStart,
-      periodEnd,
-      report: generatedReport,
+      periodStart: periodStart.toISOString().split('T')[0],
+      periodEnd: periodEnd.toISOString().split('T')[0],
+      report: reportSummary as any,
     });
     console.log(`[ReportWorker] Generated PDF report: ${pdfBuffer.length} bytes.`);
   } catch (pdfErr) {
     console.warn(`[ReportWorker] PDF generation notice:`, pdfErr);
   }
 
-  // 9. Send email notification via Resend with deduplication
+  // 10. Send email notification via Resend with deduplication
   const recipient = data.recipientEmail || workspace?.notificationEmail || 'owner@example.com';
   console.log(`[ReportWorker] Triggering report notification to ${recipient}...`);
   const notificationResult = await NotificationService.sendWeeklyReportNotification({
@@ -237,6 +252,8 @@ export async function executeReportGeneration(data: ReportJobData) {
   return {
     reportId: newReport.id,
     actionCount: generatedReport.actionPlan.length,
+    kpis: reportSummary.detailed.kpis,
+    rankingShiftRows: allShiftRows.length,
     notification: notificationResult,
   };
 }

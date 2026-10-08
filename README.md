@@ -35,6 +35,7 @@
 ## 📑 Table of Contents
 
 - [Overview](#-overview)
+- [Project Submission](#-project-submission)
 - [Key Features](#-key-features)
 - [System Architecture](#-system-architecture)
 - [Monorepo Structure](#-monorepo-structure)
@@ -59,6 +60,31 @@ Small business owners don't need vanity SEO metrics (Domain Authority, Page Auth
 3. **What specific, prioritized actions (maximum 3 to 5) should they take this week to drive real calls and bookings?**
 
 **Serp-Scout** is an autonomous multi-agent intelligence platform that continuously analyzes local search engine result pages (Google Web, Local Map Packs, and News), identifies direct local rivals, tracks striking-distance ranking opportunities, and delivers human-readable, evidence-grounded action plans directly to the business owner via interactive web dashboards, downloadable PDF reports, and automated email briefings.
+
+---
+
+## 📝 Project Submission
+
+### Project description
+
+Serp-Scout is an AI-powered competitive intelligence and local SEO platform for small businesses. It continuously researches local search results, discovers nearby competitors, uncovers keyword and content opportunities, and turns the evidence into a short list of prioritized actions. Business owners can monitor rankings and market changes through a dashboard, downloadable reports, and email briefings—without needing to interpret raw SEO data themselves.
+
+### How the project uses SerpApi
+
+Serp-Scout uses SerpApi to retrieve and normalize Google Organic, Google Maps Local Pack, and Google News results, along with People Also Ask and related-search data. It uses SerpApi's location registry to resolve locations into canonical search parameters. These results power competitor discovery, local ranking and Google Business Profile audits, keyword opportunity analysis, and ongoing detection of ranking or market changes. Search runs are recorded and subject to workspace quotas. Tavily supplements the search workflow with multi-query web-search backfills.
+
+### AI tools used
+
+- **LangGraph** orchestrates the research workflow, including parallel analysis stages for content gaps, competitor positioning, reviews, and news signals.
+- **Groq-hosted `openai/gpt-oss-120b`** extracts structured business profiles and helps analyze content gaps, messaging, customer feedback, and evidence-grounded recommendations. The model is configurable through `GROQ_MODEL`.
+- **Deterministic heuristics and rule-based checks** support competitor scoring, Google Business Profile audits, and market-shift alerts, and provide fallbacks when an LLM call fails.
+- **SerpApi and Tavily** supply the live search evidence that grounds the analysis.
+
+### Track
+
+**Primary track: AI Agents** — the core product is a LangGraph-orchestrated multi-agent system that turns live search evidence into actionable research and recommendations.
+
+**Also relevant: Commerce & Market Intelligence** — the platform helps local businesses understand competitors, market shifts, and commercial search opportunities.
 
 ---
 

@@ -4,6 +4,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth';
 import { apiClient } from '@/lib/api';
+import RadarCanvas, { type RadarNode } from '@/components/RadarCanvas';
 import {
   MapPin,
   Search,
@@ -108,6 +109,10 @@ export default function LocalSeoPage() {
   const [selectedGridKeyword, setSelectedGridKeyword] = useState<string>('primary');
   const [selectedPinIndex, setSelectedPinIndex] = useState<number>(4); // center pin by default (index 4 in 3x3)
   const [isRescanningGrid, setIsRescanningGrid] = useState(false);
+  // Radar range scale in km (null = auto-fit to the mesh). Pinned by default so
+  // dragging the km slider visibly moves the mesh instead of silently re-fitting.
+  const [radarRangeKm, setRadarRangeKm] = useState<number | null>(10);
+  const [scanId, setScanId] = useState(0);
 
   // 1-Click Schema Generator State
   const [schemaCopied, setSchemaCopied] = useState(false);
@@ -826,26 +831,38 @@ export default function LocalSeoPage() {
         ];
         const dirs = gridSize === 3 ? dirs3 : dirs5;
 
-        const nodes = [];
+        const nodes: RadarNode[] = [];
+        const RADAR_RANGE_LADDER = [1, 2, 5, 10, 20, 50];
+
+        const bearingLabel = (deg: number): string => {
+          const points = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
+          return points[Math.round(((deg % 360) + 360) % 360 / 22.5) % 16];
+        };
+
         for (let r = 0; r < gridSize; r++) {
           for (let c = 0; c < gridSize; c++) {
-            const dy = half - r;
-            const dx = c - half;
-            const dist = Math.round(Math.sqrt(dx * dx + dy * dy) * stepKm * 10) / 10;
+            // Axial offsets: ±gridRadiusKm along each axis, so the mesh spans
+            // 2×radius side-to-side (a standard geo-grid). The corners therefore
+            // sit at radius×√2 — surfaced below as the mesh reach instead of
+            // being silently reported as "within radius".
+            const dxKm = (c - half) * stepKm;
+            const dyKm = (half - r) * stepKm;
+            const dist = Math.round(Math.hypot(dxKm, dyKm) * 10) / 10;
+            const bearingDeg = (Math.atan2(dxKm, dyKm) * 180) / Math.PI;
             const isCenter = r === half && c === half;
-            
+
             let rank = 1;
             if (isCenter) {
               rank = mapResults[0]?.rank || 1;
             } else {
-              const ring = Math.max(Math.abs(dx), Math.abs(dy));
-              if (ring === 1) {
+              const ring = Math.max(Math.abs(dxKm), Math.abs(dyKm)) / Math.max(stepKm, 0.0001);
+              if (ring <= 1.01) {
                 rank = (r + c) % 2 === 0 ? 2 : 3;
               } else {
                 rank = 3 + ((r * 3 + c * 2) % 6);
               }
             }
-            
+
             const in3Pack = rank <= 3;
             const leaderName = in3Pack && rank === 1 ? bizName : topRival;
 
@@ -854,8 +871,12 @@ export default function LocalSeoPage() {
               index: nodes.length,
               row: r,
               col: c,
-              direction: dirs[r]?.[c] || `(${dx}, ${dy})`,
+              direction: dirs[r]?.[c] || `(${dxKm.toFixed(1)}, ${dyKm.toFixed(1)}) km`,
               distanceKm: dist,
+              dxKm,
+              dyKm,
+              bearingDeg: (bearingDeg + 360) % 360,
+              bearingLabel: bearingLabel(bearingDeg),
               rank,
               in3Pack,
               leader: leaderName,
@@ -869,6 +890,9 @@ export default function LocalSeoPage() {
         const in3PackCount = nodes.filter((n) => n.in3Pack).length;
         const saturationRate = Math.round((in3PackCount / nodes.length) * 100);
         const avgRank = (nodes.reduce((acc, n) => acc + n.rank, 0) / nodes.length).toFixed(1);
+        const meshReachKm = Math.round(Math.max(...nodes.map((n) => n.distanceKm)) * 10) / 10;
+        const autoRangeKm = RADAR_RANGE_LADDER.find((r) => r >= meshReachKm * 1.05) ?? 50;
+        const effectiveRangeKm = radarRangeKm ?? autoRangeKm;
 
         return (
           <div className="space-y-6 animate-fade-in">
@@ -891,6 +915,11 @@ export default function LocalSeoPage() {
                 disabled={isRescanningGrid}
                 onClick={() => {
                   setIsRescanningGrid(true);
+                  // Restart the sweep and re-seed the display, then re-run the
+                  // scan when a query is configured so the mesh reflects fresh
+                  // 3-Pack data rather than only a cosmetic refresh.
+                  setScanId((n) => n + 1);
+                  if (query.trim()) handleScanMaps();
                   setTimeout(() => setIsRescanningGrid(false), 900);
                 }}
                 className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-cyan-600 hover:from-indigo-500 hover:to-cyan-500 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-md shadow-indigo-500/20 transition shrink-0 cursor-pointer"
@@ -927,7 +956,7 @@ export default function LocalSeoPage() {
                   <span className="text-xs font-medium text-slate-500">Across {gridRadiusKm}km Radius</span>
                 </div>
                 <p className="text-[11px] text-slate-500 mt-1">
-                  Dominant within 2km • Decays on outer perimeter
+                  Mesh spans ±{gridRadiusKm} km from HQ (reach {meshReachKm} km) on a {effectiveRangeKm} km range scale
                 </p>
               </div>
 
@@ -956,8 +985,8 @@ export default function LocalSeoPage() {
                     </span>
                   </div>
 
-                  {/* Grid Size & Radius Controls */}
-                  <div className="flex items-center gap-2">
+                  {/* Grid Size, Radius & Range Scale Controls */}
+                  <div className="flex flex-wrap items-center gap-2">
                     <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200 text-xs">
                       <button
                         type="button"
@@ -980,7 +1009,7 @@ export default function LocalSeoPage() {
                     </div>
 
                     <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200 text-xs">
-                      {[3, 5, 10].map((rad) => (
+                      {[3, 5, 10, 25].map((rad) => (
                         <button
                           key={rad}
                           type="button"
@@ -993,67 +1022,92 @@ export default function LocalSeoPage() {
                         </button>
                       ))}
                     </div>
-                  </div>
-                </div>
 
-                {/* Radar Grid Graphic Box */}
-                <div className="relative aspect-square max-w-[440px] mx-auto w-full rounded-2xl bg-gradient-to-b from-slate-950 to-slate-900 border border-slate-800 p-4 flex items-center justify-center overflow-hidden shadow-inner">
-                  {/* Concentric rings */}
-                  <div className="absolute inset-6 rounded-full border border-indigo-500/20 pointer-events-none" />
-                  <div className="absolute inset-16 rounded-full border border-cyan-500/25 pointer-events-none" />
-                  <div className="absolute inset-28 rounded-full border border-emerald-500/20 pointer-events-none" />
-                  {/* Crosshairs */}
-                  <div className="absolute inset-x-0 top-1/2 h-[1px] bg-slate-800/80 pointer-events-none" />
-                  <div className="absolute inset-y-0 left-1/2 w-[1px] bg-slate-800/80 pointer-events-none" />
-
-                  {/* Grid Pins Matrix */}
-                  <div
-                    className="relative z-10 grid gap-3 sm:gap-4 w-full h-full p-2 place-items-center"
-                    style={{
-                      gridTemplateColumns: `repeat(${gridSize}, minmax(0, 1fr))`,
-                      gridTemplateRows: `repeat(${gridSize}, minmax(0, 1fr))`,
-                    }}
-                  >
-                    {nodes.map((node) => {
-                      const isSelected = safeSelectedPin.index === node.index;
-                      const isCenter = node.row === half && node.col === half;
-
-                      // Color based on rank
-                      const pinColor = node.rank <= 3
-                        ? 'bg-emerald-500 text-white border-emerald-300 ring-emerald-400/40'
-                        : node.rank <= 10
-                        ? 'bg-amber-500 text-white border-amber-300 ring-amber-400/40'
-                        : 'bg-rose-500 text-white border-rose-300 ring-rose-400/40';
-
-                      return (
+                    {/* Radar range scale: the view span in km. Pinning it is what
+                        makes the km control move the mesh rather than re-fit it. */}
+                    <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200 text-xs">
+                      <button
+                        type="button"
+                        onClick={() => setRadarRangeKm(null)}
+                        title="Auto-fit the range scale to the mesh"
+                        className={`px-2 py-1 rounded-md font-bold transition ${
+                          radarRangeKm === null ? 'bg-white text-cyan-700 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+                        }`}
+                      >
+                        AUTO
+                      </button>
+                      {[5, 10, 20, 50].map((scale) => (
                         <button
-                          key={node.id}
+                          key={scale}
                           type="button"
-                          onClick={() => setSelectedPinIndex(node.index)}
-                          className={`relative group rounded-xl flex items-center justify-center font-black transition-all cursor-pointer ${
-                            gridSize === 3 ? 'w-10 h-10 sm:w-12 sm:h-12 text-sm sm:text-base' : 'w-7 h-7 sm:w-8 sm:h-8 text-[11px]'
-                          } ${pinColor} border shadow-lg ${
-                            isSelected ? 'ring-4 scale-110 z-20 brightness-110' : 'hover:scale-105 opacity-90 hover:opacity-100'
+                          onClick={() => setRadarRangeKm(scale)}
+                          title={`Fixed ${scale} km range scale`}
+                          className={`px-2 py-1 rounded-md font-bold transition ${
+                            radarRangeKm === scale ? 'bg-white text-cyan-700 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
                           }`}
                         >
-                          <span>#{node.rank}</span>
-
-                          {isCenter && (
-                            <span className="absolute -top-1.5 -right-1.5 flex h-3 w-3">
-                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75" />
-                              <span className="relative inline-flex rounded-full h-3 w-3 bg-cyan-500 border border-white" />
-                            </span>
-                          )}
+                          R{scale}
                         </button>
-                      );
-                    })}
+                      ))}
+                    </div>
                   </div>
                 </div>
 
+                {/* Radius slider: continuous km control over the mesh itself */}
+                <div className="mb-4 flex items-center gap-3">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 whitespace-nowrap">
+                    Mesh radius
+                  </span>
+                  <input
+                    type="range"
+                    min={1}
+                    max={25}
+                    step={0.5}
+                    value={gridRadiusKm}
+                    onChange={(e) => setGridRadiusKm(Number(e.target.value))}
+                    className="w-full accent-indigo-600"
+                    aria-label="Geo-grid radius in kilometres"
+                  />
+                  <span className="text-xs font-black text-slate-800 tabular-nums w-24 text-right">
+                    {gridRadiusKm} km · reach {meshReachKm} km
+                  </span>
+                </div>
+
+                {/* Real PPI radar: km geometry, range rings, sweep, blips */}
+                <RadarCanvas
+                  nodes={nodes}
+                  gridRadiusKm={gridRadiusKm}
+                  rangeKm={effectiveRangeKm}
+                  selectedIndex={safeSelectedPin.index}
+                  onSelect={setSelectedPinIndex}
+                  scanId={scanId}
+                  className="mx-auto max-w-[440px]"
+                />
+
+                {/* Range scale footer */}
+                <div className="flex flex-wrap items-center justify-between gap-2 mt-3 text-[10px] font-semibold text-slate-500">
+                  <span>
+                    Range scale <span className="text-cyan-700 font-bold">{effectiveRangeKm} km</span>
+                    {radarRangeKm === null ? ' (auto)' : ' (pinned)'} · rings every{' '}
+                    {(effectiveRangeKm / 4).toFixed(effectiveRangeKm / 4 >= 1 ? 1 : 2)} km
+                  </span>
+                  <span>
+                    Mesh reach <span className="text-slate-700 font-bold">{meshReachKm} km</span> · service radius{' '}
+                    <span className="text-cyan-700 font-bold">{gridRadiusKm} km</span>
+                  </span>
+                </div>
+
+                {meshReachKm > effectiveRangeKm && (
+                  <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-semibold text-amber-800">
+                    Mesh reach ({meshReachKm} km) exceeds the {effectiveRangeKm} km range scale, so outer blips are
+                    clamped to the edge. Widen the range scale (or switch to AUTO) to see them at true distance.
+                  </div>
+                )}
+
                 {/* Radar Legend */}
-                <div className="flex flex-wrap items-center justify-center gap-4 mt-4 pt-3 border-t border-slate-100 text-xs font-semibold text-slate-600">
+                <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 mt-4 pt-3 border-t border-slate-100 text-xs font-semibold text-slate-600">
                   <span className="flex items-center gap-1.5">
-                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-400" />
                     #1–#3 Dominant (In 3-Pack)
                   </span>
                   <span className="flex items-center gap-1.5">
@@ -1061,9 +1115,18 @@ export default function LocalSeoPage() {
                     #4–#10 Striking Distance
                   </span>
                   <span className="flex items-center gap-1.5">
-                    <span className="w-2.5 h-2.5 rounded-full bg-rose-500" />
+                    <span className="w-2.5 h-2.5 rounded-full bg-rose-400" />
                     &gt;#10 Lost to Rival
                   </span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-3 h-3 rounded-full border border-dashed border-cyan-400" />
+                    Service radius
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-3 h-3 rounded-full border border-dashed border-amber-400" />
+                    Beyond range scale
+                  </span>
+                  <span className="text-slate-400 font-medium">Hover a blip for bearing/range · click to inspect</span>
                 </div>
               </div>
 

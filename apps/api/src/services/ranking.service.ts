@@ -28,9 +28,26 @@ export interface KeywordRankingDetail {
   url: string | null;
   serpFeatures: string[] | null;
   lastObservedAt: Date | null;
+  /** When this phrase was last swept, whether or not the business appeared. */
+  lastCheckedAt: Date | null;
+  /**
+   * True when the newest sweep of this phrase produced no position for the
+   * business, so `currentRank` is null and `previousRank` holds the last known
+   * position. Distinct from "never checked".
+   */
+  absentFromLatestCheck: boolean;
+  /**
+   * Chronological position history for this keyword (oldest first): one entry per
+   * sweep of the phrase, with `rank: null` where the business did not appear.
+   * Capped to the most recent MAX_TREND_POINTS checks.
+   */
+  checks: Array<{ at: Date; rank: number | null }>;
   bestCompetitorRank: number | null;
   bestCompetitorDomain: string | null;
 }
+
+/** How many past checks a keyword's trend keeps (sparkline width in the report). */
+export const MAX_TREND_POINTS = 12;
 
 export function extractDomainFromUrl(url: string): string {
   try {
@@ -171,6 +188,35 @@ export async function getRankingsForBusiness(
     .where(inArray(rankingObservations.keywordId, keywordIds))
     .orderBy(desc(rankingObservations.observedAt));
 
+  // When was each phrase swept? A sweep newer than our newest own-domain
+  // observation means the business was absent from that sweep, so the previous
+  // position is history rather than the current rank. The full sweep list is kept
+  // per phrase so each keyword can carry a real position trend.
+  const phraseList = keywordList.map((k) => k.phrase);
+  const runRows = phraseList.length
+    ? await db
+        .select({
+          id: searchRuns.id,
+          query: searchRuns.query,
+          requestedAt: searchRuns.requestedAt,
+        })
+        .from(searchRuns)
+        .where(and(eq(searchRuns.businessId, businessId), inArray(searchRuns.query, phraseList)))
+    : [];
+
+  const sweepsByPhrase = new Map<string, Array<{ runId: string; at: number }>>();
+  for (const run of runRows) {
+    const key = run.query.trim().toLowerCase();
+    const list = sweepsByPhrase.get(key) ?? [];
+    list.push({ runId: run.id, at: new Date(run.requestedAt).getTime() });
+    sweepsByPhrase.set(key, list);
+  }
+
+  const lastSweptAtByPhrase = new Map<string, number>();
+  for (const [key, sweeps] of sweepsByPhrase) {
+    lastSweptAtByPhrase.set(key, Math.max(...sweeps.map((s) => s.at)));
+  }
+
   const result: KeywordRankingDetail[] = [];
 
   for (const kw of keywordList) {
@@ -212,8 +258,25 @@ export async function getRankingsForBusiness(
     const latestCheck = checks[0] ?? null;
     const previousCheck = checks[1] ?? null;
 
+    // A sweep for this phrase that ran after our newest own-domain observation
+    // means the business did not appear in it. Reporting the older position as
+    // "current" would be stale, so the row becomes absent-from-latest-check and
+    // the last known position moves to `previousRank`.
+    const lastSweptAt = lastSweptAtByPhrase.get(kw.phrase.trim().toLowerCase()) ?? null;
+    const absentFromLatestCheck =
+      lastSweptAt !== null && (latestCheck === null || lastSweptAt > latestCheck.observedAt.getTime());
+
+    const currentRank = absentFromLatestCheck ? null : latestCheck ? latestCheck.rank : null;
+    const previousRank = absentFromLatestCheck
+      ? latestCheck
+        ? latestCheck.rank
+        : null
+      : previousCheck
+        ? previousCheck.rank
+        : null;
+
     const delta =
-      latestCheck && previousCheck ? previousCheck.rank - latestCheck.rank : null;
+      currentRank !== null && previousRank !== null ? previousRank - currentRank : null;
 
     // Find best competitor observation
     const competitorObs = kwObs
@@ -221,6 +284,28 @@ export async function getRankingsForBusiness(
       .sort((a, b) => a.rank - b.rank);
 
     const bestComp = competitorObs[0] || null;
+
+    // Position trend: one point per sweep of this phrase, chronological. Sweeps
+    // where the business did not appear become `rank: null` gap points, and any
+    // own observation whose run is missing from the sweep list is folded in so
+    // legacy rows still produce a line.
+    const trendByRun = new Map<string, { at: number; rank: number | null }>();
+    for (const sweep of sweepsByPhrase.get(kw.phrase.trim().toLowerCase()) ?? []) {
+      trendByRun.set(sweep.runId, { at: sweep.at, rank: null });
+    }
+    for (const check of checksByRun.values()) {
+      const runId = check.obs.searchRunId ?? `observation:${check.obs.id}`;
+      const existing = trendByRun.get(runId);
+      if (existing) {
+        existing.rank = check.rank;
+      } else {
+        trendByRun.set(runId, { at: check.observedAt.getTime(), rank: check.rank });
+      }
+    }
+
+    const trend = [...trendByRun.values()]
+      .sort((a, b) => a.at - b.at)
+      .slice(-MAX_TREND_POINTS);
 
     result.push({
       keyword: {
@@ -232,13 +317,16 @@ export async function getRankingsForBusiness(
         opportunityScore: kw.opportunityScore,
         createdAt: kw.createdAt,
       },
-      currentRank: latestCheck ? latestCheck.rank : null,
-      previousRank: previousCheck ? previousCheck.rank : null,
+      currentRank,
+      previousRank,
       delta,
       resultType: latestCheck ? latestCheck.obs.resultType : null,
       url: latestCheck ? latestCheck.obs.url : null,
       serpFeatures: (latestCheck?.obs.serpFeatures as string[]) || null,
       lastObservedAt: latestCheck ? latestCheck.observedAt : null,
+      lastCheckedAt: lastSweptAt !== null ? new Date(lastSweptAt) : null,
+      absentFromLatestCheck,
+      checks: trend.map((point) => ({ at: new Date(point.at), rank: point.rank })),
       bestCompetitorRank: bestComp ? bestComp.rank : null,
       bestCompetitorDomain: bestComp ? bestComp.domain : null,
     });

@@ -22,15 +22,60 @@ import {
   ReportPdfData,
 } from '../services/pdf.service.js';
 import { getRankingsForBusiness } from '../services/ranking.service.js';
+import { buildDetailedReport } from '../services/report-bundle.service.js';
 import { MarketShiftService } from '../services/market-shift.service.js';
 import { env } from '../config/env.js';
-import { GeneratedReport } from '@serp-scout/types';
+import { GeneratedReport, DetailedReportSections } from '@serp-scout/types';
 
 const router = Router();
 
 const updateRecStatusSchema = z.object({
   status: z.enum(['planned', 'in_progress', 'completed', 'dismissed']),
 });
+
+/**
+ * Returns the stored summary with `detailed` sections attached.
+ *
+ * Reports written before the detailed pipeline only carry the legacy
+ * `visibilityChanges.keywordChanges` array, which was frequently empty or mixed
+ * competitor positions into the business's own history. Rebuilding the sections
+ * here means old reports render a correct table instead of a blank one, and the
+ * cost is a handful of indexed reads per request.
+ */
+async function hydrateDetailedSections(params: {
+  businessId: string;
+  reportId: string | null;
+  periodStart: Date;
+  periodEnd: Date;
+  summary: any;
+}): Promise<any> {
+  const { businessId, reportId, periodStart, periodEnd, summary } = params;
+  if (summary?.detailed) return summary;
+
+  try {
+    const detailed: DetailedReportSections = await buildDetailedReport({
+      businessId,
+      periodStart,
+      periodEnd,
+      reportId,
+      generated: summary as GeneratedReport,
+    });
+
+    return {
+      ...summary,
+      detailed: {
+        ...detailed,
+        // Prefer the report's own plan when it has one; otherwise the persisted
+        // recommendations the builder loaded.
+        actions: summary?.actionPlan?.length ? summary.actionPlan : detailed.actions,
+        meta: { ...detailed.meta, reportId },
+      },
+    };
+  } catch (err: any) {
+    console.warn(`[Reports] Could not build detailed sections for ${reportId}: ${err?.message || err}`);
+    return summary;
+  }
+}
 
 // POST /api/businesses/:id/reports/generate - Generate fresh report
 router.post(
@@ -104,7 +149,7 @@ router.post(
         apiKey: env.GROQ_API_KEY,
       });
 
-      // 3. Persist Report in Neon
+      // 3. Persist Report in Neon, with the detailed sections the PDF/UI render
       const [newReport] = await db
         .insert(reports)
         .values({
@@ -115,6 +160,29 @@ router.post(
           status: 'published',
         })
         .returning();
+
+      const detailedSections = await buildDetailedReport({
+        businessId,
+        periodStart: new Date(periodStart),
+        periodEnd: new Date(periodEnd),
+        reportId: newReport.id,
+        generated,
+      }).catch((err) => {
+        console.warn(`[Reports] Detailed sections unavailable for ${newReport.id}: ${err?.message || err}`);
+        return null;
+      });
+
+      if (detailedSections) {
+        await db
+          .update(reports)
+          .set({
+            summary: {
+              ...generated,
+              detailed: { ...detailedSections, actions: generated.actionPlan },
+            } as any,
+          })
+          .where(eq(reports.id, newReport.id));
+      }
 
       // 4. Persist Recommendations and Source Evidence
       const savedRecs = [];
@@ -267,10 +335,21 @@ router.get(
           .where(eq(sourceEvidence.businessId, existing.business.id));
       }
 
+      // Reports generated before the detailed pipeline have no `detailed`
+      // sections; hydrate them on the fly so every report — old or new — renders
+      // the ranking table, competitor landscape and KPIs.
+      const summary = await hydrateDetailedSections({
+        businessId: existing.business.id,
+        reportId,
+        periodStart: existing.report.periodStart,
+        periodEnd: existing.report.periodEnd,
+        summary: (existing.report.summary as any) || {},
+      });
+
       res.json({
         success: true,
         data: {
-          report: existing.report,
+          report: { ...existing.report, summary },
           business: existing.business,
           recommendations: recs,
           evidence: evidenceList,
@@ -314,8 +393,18 @@ router.get(
 
       const rawSummary = (record.report.summary as any) || {};
 
+      // Hydrate the detailed sections (old reports have none), so every PDF
+      // carries the real ranking table instead of an empty one.
+      const hydratedSummary = await hydrateDetailedSections({
+        businessId: record.business.id,
+        reportId,
+        periodStart: record.report.periodStart,
+        periodEnd: record.report.periodEnd,
+        summary: rawSummary,
+      });
+
       // If actionPlan is missing or empty, hydrate from database recommendations
-      let actionPlan = Array.isArray(rawSummary.actionPlan) ? rawSummary.actionPlan : [];
+      let actionPlan = Array.isArray(hydratedSummary.actionPlan) ? hydratedSummary.actionPlan : [];
       if (actionPlan.length === 0) {
         const recs = await db
           .select()
@@ -335,7 +424,7 @@ router.get(
           suggestedDeadline: 'Within 7 days',
           searchQueries: (r.evidence as any)?.queries || [],
           sourceUrls: (r.evidence as any)?.urls || [],
-          implementationSteps: [],
+          implementationSteps: ((r.checklist as any)?.steps as string[]) || [],
         }));
       }
 
@@ -345,7 +434,7 @@ router.get(
         periodStart: record.report.periodStart.toISOString().split('T')[0],
         periodEnd: record.report.periodEnd.toISOString().split('T')[0],
         report: {
-          ...rawSummary,
+          ...hydratedSummary,
           actionPlan,
         },
       };
@@ -1035,6 +1124,16 @@ sharedReportsRouter.get('/:token', async (req, res): Promise<void> => {
         .where(eq(sourceEvidence.businessId, reportRec.business.id));
     }
 
+    // Shared reports need the same detailed sections as the workspace view
+    // (hydrated on the fly for reports stored before the detailed pipeline).
+    const sharedSummary = await hydrateDetailedSections({
+      businessId: reportRec.business.id,
+      reportId: share.reportId,
+      periodStart: reportRec.report.periodStart,
+      periodEnd: reportRec.report.periodEnd,
+      summary: (reportRec.report.summary as any) || {},
+    });
+
     res.json({
       success: true,
       data: {
@@ -1043,7 +1142,7 @@ sharedReportsRouter.get('/:token', async (req, res): Promise<void> => {
           viewMode: share.viewMode,
           expiresAt: share.expiresAt,
         },
-        report: reportRec.report,
+        report: { ...reportRec.report, summary: sharedSummary },
         business: {
           id: reportRec.business.id,
           name: reportRec.business.name,

@@ -223,11 +223,13 @@ export default function OverviewDashboardPage() {
         setCompetitors([]);
       }
 
+      let recCount = 0;
       if (repRes.status === 'fulfilled' && Array.isArray(repRes.value) && repRes.value.length > 0) {
         const latestReportId = repRes.value[0].id;
         try {
           const reportDetail = await apiClient<any>(`/api/reports/${latestReportId}`, { token });
           if (reportDetail && Array.isArray(reportDetail.recommendations)) {
+            recCount = reportDetail.recommendations.length;
             setRecommendations(reportDetail.recommendations);
           }
         } catch (err) {
@@ -236,6 +238,10 @@ export default function OverviewDashboardPage() {
       } else {
         setRecommendations([]);
       }
+
+      // #region agent log
+      fetch('http://127.0.0.1:7537/ingest/08159c05-3a23-4a09-bfe4-16a226612021',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'97920a'},body:JSON.stringify({sessionId:'97920a',runId:'pre-fix',hypothesisId:'B',location:'app/page.tsx:loadOverviewData',message:'Overview intelligence snapshot',data:{bizId,kwOk:kwRes.status,kwCount:kwRes.status==='fulfilled'&&Array.isArray(kwRes.value)?kwRes.value.length:-1,compOk:compRes.status,compCount:compRes.status==='fulfilled'&&Array.isArray(compRes.value)?compRes.value.length:-1,repOk:repRes.status,repCount:repRes.status==='fulfilled'&&Array.isArray(repRes.value)?repRes.value.length:-1,recCount},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
     } catch (err) {
       console.error('Failed to load overview data:', err);
     }
@@ -298,6 +304,9 @@ export default function OverviewDashboardPage() {
               if (jobRes.result) {
                 setAnalysisResult(jobRes.result);
               }
+              // #region agent log
+              fetch('http://127.0.0.1:7537/ingest/08159c05-3a23-4a09-bfe4-16a226612021',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'97920a'},body:JSON.stringify({sessionId:'97920a',runId:'pre-fix',hypothesisId:'C',location:'app/page.tsx:trackJob',message:'Tracked job completed; refreshing businesses only',data:{jobId,jobName:jobRes.id,state:jobRes.state,willCallLoadOverviewData:false,willCallLoadBusinesses:true},timestamp:Date.now()})}).catch(()=>{});
+              // #endregion
               loadBusinesses();
             } else if (jobRes.isFailed) {
               clearInterval(pollInterval);
@@ -358,6 +367,9 @@ export default function OverviewDashboardPage() {
 
       if (paramJobId) {
         autoTriggeredRef.current = true;
+        // #region agent log
+        fetch('http://127.0.0.1:7537/ingest/08159c05-3a23-4a09-bfe4-16a226612021',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'97920a'},body:JSON.stringify({sessionId:'97920a',runId:'pre-fix',hypothesisId:'A',location:'app/page.tsx:autoAnalyze',message:'Overview auto-run: tracking existing job',data:{branch:'trackJob',paramJobId,paramBizId,autoAnalyze},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
         trackJob(paramJobId);
         return;
       }
@@ -368,6 +380,9 @@ export default function OverviewDashboardPage() {
 
       if (targetBiz && (autoAnalyze || !targetBiz.lastAnalyzedAt)) {
         autoTriggeredRef.current = true;
+        // #region agent log
+        fetch('http://127.0.0.1:7537/ingest/08159c05-3a23-4a09-bfe4-16a226612021',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'97920a'},body:JSON.stringify({sessionId:'97920a',runId:'pre-fix',hypothesisId:'A',location:'app/page.tsx:autoAnalyze',message:'Overview auto-run: enqueue website analyze only',data:{branch:'handleRunAnalysis',targetBizId:targetBiz.id,lastAnalyzedAt:targetBiz.lastAnalyzedAt||null,autoAnalyze},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
         handleRunAnalysis(targetBiz.id);
       }
     }

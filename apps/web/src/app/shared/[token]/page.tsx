@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { fetchApiJson } from '@/lib/http';
+import ReportDetailedSections from '@/components/ReportDetailedSections';
 import {
   Sparkles,
   FileText,
@@ -57,6 +58,8 @@ interface SharedDataPayload {
         date: string;
         url?: string;
       }>;
+      /** Detailed sections (KPIs, ranking shifts, competitors). Optional. */
+      detailed?: import('@serp-scout/types').DetailedReportSections;
     };
   };
   business: {
@@ -300,6 +303,15 @@ export default function SharedReportPage({ params }: { params: { token: string }
             </p>
           </div>
         </div>
+
+        {/* Detailed sections: KPI dashboard + ranking shifts (+ competitors in
+            specialist mode, which is the deeper client-facing view). */}
+        <ReportDetailedSections
+          detailed={summary?.detailed}
+          legacyKeywordChanges={summary?.visibilityChanges?.keywordChanges}
+          showCompetitors={activeMode === 'specialist'}
+          compact={activeMode === 'executive'}
+        />
 
         {/* Prioritized Action Plan with Sub-Task Steps */}
         <section className="bg-white rounded-2xl border border-slate-200 p-6 sm:p-8 shadow-xs space-y-6">

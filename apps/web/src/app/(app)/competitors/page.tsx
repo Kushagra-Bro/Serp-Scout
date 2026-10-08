@@ -215,7 +215,14 @@ export default function CompetitorsPage() {
 
         if ((list.length === 0 || shouldAutoDiscover) && !autoTriggeredRef.current.has(targetId)) {
           autoTriggeredRef.current.add(targetId);
+          // #region agent log
+          fetch('http://127.0.0.1:7537/ingest/08159c05-3a23-4a09-bfe4-16a226612021',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'97920a'},body:JSON.stringify({sessionId:'97920a',runId:'pre-fix',hypothesisId:'D',location:'competitors/page.tsx:loadCompetitors',message:'Competitors tab mounted; auto-discover because empty',data:{targetId,compCount:list.length,shouldAutoDiscover},timestamp:Date.now()})}).catch(()=>{});
+          // #endregion
           handleDiscover(targetId);
+        } else {
+          // #region agent log
+          fetch('http://127.0.0.1:7537/ingest/08159c05-3a23-4a09-bfe4-16a226612021',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'97920a'},body:JSON.stringify({sessionId:'97920a',runId:'pre-fix',hypothesisId:'D',location:'competitors/page.tsx:loadCompetitors',message:'Competitors tab mounted; using existing rows',data:{targetId,compCount:list.length,shouldAutoDiscover,alreadyAutoTriggered:autoTriggeredRef.current.has(targetId)},timestamp:Date.now()})}).catch(()=>{});
+          // #endregion
         }
       } catch (err: any) {
         console.error('Failed to load competitors:', err);

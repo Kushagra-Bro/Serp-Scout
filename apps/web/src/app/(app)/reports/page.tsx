@@ -25,6 +25,7 @@ import {
   ArrowRight,
 } from 'lucide-react';
 import { GeneratedReport } from '@serp-scout/types';
+import ReportDetailedSections from '@/components/ReportDetailedSections';
 
 interface BusinessSummary {
   id: string;
@@ -867,6 +868,15 @@ export default function ReportsPage() {
                   </div>
                 );
               })()}
+
+              {/* Detailed sections: KPI dashboard, Search Visibility & Ranking
+                  Shifts, competitor landscape, limitations. */}
+              <ReportDetailedSections
+                detailed={(activeReportDetails.report.summary as GeneratedReport)?.detailed}
+                legacyKeywordChanges={
+                  (activeReportDetails.report.summary as GeneratedReport)?.visibilityChanges?.keywordChanges
+                }
+              />
 
               {/* Action Plan (Top 3 to 5 Prioritized Actions with Implementation Checklists) */}
               <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm space-y-4">
